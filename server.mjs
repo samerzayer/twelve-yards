@@ -50,7 +50,7 @@ function roomOf(name) {
   return r;
 }
 function broadcast(r) {
-  const connected = r.conns.size;
+  const connected = new Set(r.conns.values()).size; // players, not sockets
   for (const [ws, pid] of r.conns) {
     if (ws.readyState !== 1) continue;
     ws.send(JSON.stringify({ type: 'state', status: r.game.status, seats: r.game.seats, you: pid, connected,
@@ -69,6 +69,7 @@ function attach(ws, name) {
     try {
       if (msg.type === 'join') {
         const pid = String(msg.playerId || '').slice(0, 64); if (!pid) return err('bad player');
+        for (const [w, p] of r.conns) if (p === pid && w !== ws) { r.conns.delete(w); try { w.terminate(); } catch {} } // same player came back on a new connection
         r.conns.set(ws, pid);
         if (!g.seats.includes(pid) && g.seats.length < META.maxPlayers) g.seats.push(pid);
         if (g.status === 'waiting' && g.seats.length >= META.minPlayers) { g.state = logic.setup(g.seats); g.status = 'playing'; }

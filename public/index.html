@@ -202,6 +202,15 @@ a.btn{text-decoration:none;display:inline-block}
 .dot.goal{background:var(--lime);border-color:var(--lime);color:#0b1400}
 .dot.next{box-shadow:0 0 0 3px rgba(198,255,61,.3)}
 #strike{width:100%}
+/* compact HUD text: nothing big over the pitch */
+.role{font-size:clamp(20px,4.6vw,30px)!important}
+.hint{font-size:13px}
+.psub{display:inline-block;font-family:var(--cond);font-style:italic;font-weight:800;font-size:12px;letter-spacing:.18em;color:var(--muted);margin-bottom:2px}
+.psub.hot{color:#fff;background:var(--rival);padding:0 8px}
+.call{transform:none}
+.call .big{font-size:clamp(30px,7.5vw,54px)!important;line-height:.95;padding:0 16px;text-shadow:0 3px 18px rgba(0,0,0,.85)}
+.call.good .big{text-shadow:0 0 22px rgba(198,255,61,.35),0 3px 18px rgba(0,0,0,.85)}
+.call .sub{font-size:15px;margin-top:2px}
 .read,.port .read,.land .read{left:50%;right:auto;top:auto;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));width:auto;max-width:calc(100% - 32px);box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:5px 18px;border:0;border-radius:0;clip-path:var(--slant);background:rgba(7,12,26,.82);white-space:nowrap}
 .read b{font-family:var(--cond);font-style:italic;font-weight:800;font-size:13px;letter-spacing:.14em;color:var(--muted);margin-right:2px}
 .read .c{font-family:var(--cond);font-style:italic;font-weight:800;font-size:15px;color:rgba(255,255,255,.6);padding:0 6px}
@@ -292,6 +301,7 @@ a.btn{text-decoration:none;display:inline-block}
       </button>
     </div>
     <div class="prompt" id="prompt" hidden>
+      <div class="psub" id="psub"></div>
       <div class="role" id="role"></div>
       <div class="hint" id="hint"></div>
       <div class="tbar"><i id="tbar"></i></div>
@@ -570,7 +580,7 @@ function layout(){
 }
 function placeHud(){
   if(!L)return;
-  $('#call').style.top=(L.gt+L.gh*.45)+'px';
+  $('#call').style.top=($('.top').getBoundingClientRect().bottom+6)+'px';
 
 }
 
@@ -703,12 +713,7 @@ function startTurn(){
 }
 const ICO_BALL='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#fff" stroke="currentColor" stroke-width="1.6"/><path d="M12 7.6l3.7 2.7-1.4 4.4H9.7l-1.4-4.4z" fill="#111"/></svg>';
 const ICO_GLOVE='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 21v-3.5L4.2 12.8a1.6 1.6 0 0 1 2.6-1.8L8.5 13V5.2a1.4 1.4 0 0 1 2.8 0V11h.4V3.8a1.4 1.4 0 0 1 2.8 0V11h.4V4.8a1.4 1.4 0 0 1 2.8 0V12h.3V7.6a1.4 1.4 0 0 1 2.8 0V15c0 3.3-2.4 6-5.6 6z"/></svg>';
-function showRole(shoot,sub,hot){ // big card at the start of every kick: are you shooting or in goal?
-  const b=$('#banner'),rc=b.querySelector('.rc');$('#bannerSub').textContent=sub;
-  $('#bannerTxt').innerHTML=shoot?ICO_BALL+'YOUR SHOT':ICO_GLOVE+'YOU\'RE IN GOAL';
-  b.className='banner '+(shoot?'shoot':'keep')+(hot?' hot':'');b.hidden=false;rc.style.animation='none';void rc.offsetWidth;rc.style.animation='';
-  clearTimeout(S.bannerT);S.bannerT=setTimeout(()=>{b.hidden=true},1500);
-}
+function showRole(shoot,sub,hot){const t=$('#psub');t.textContent=sub;t.className='psub'+(hot?' hot':'')}
 function setDeadline(d){S.dur=d;S.deadline=real()+d}
 function setPrompt(r,h){$('#role').innerHTML=r;$('#hint').textContent=h}
 const THR=z=>{const c=z%3,r=(z/3)|0;return r===0?(c===1?.55:.4):(c===1?.85:.6)};
@@ -1290,7 +1295,10 @@ $('#menuBtn').addEventListener('click',()=>{leaveOnline();$('#over').hidden=true
 const ON={role:'',oppName:'',code:'',ws:null,retry:0,view:null,status:'',connected:0,named:false,want:false,closing:false};
 const qs=new URLSearchParams(location.search);
 const cleanName=s=>String(s||'').replace(/[^\p{L}\p{N} _.-]/gu,'').trim().slice(0,12);
-function pidGet(){let id=null;try{id=localStorage.getItem('ty:pid')}catch(e){}if(!id){id=Math.random().toString(36).slice(2,12);try{localStorage.setItem('ty:pid',id)}catch(e){}}return id}
+let PID=null;
+function pidGet(){ // one player per browser tab (two tabs on one phone = two players); a reload keeps the seat
+  if(PID)return PID;let id=null;try{id=sessionStorage.getItem('ty:pid')}catch(e){}
+  if(!id){id=Math.random().toString(36).slice(2,12);try{sessionStorage.setItem('ty:pid',id)}catch(e){}}return PID=id}
 function lmsg(t,err){const m=$('#lobbyMsg');m.textContent=t||'';m.className='lobbymsg'+(err?' err':'')}
 function myName(){return cleanName($('#nick').value)}
 function inviteLink(code){return location.origin+'/?room='+code}
@@ -1299,12 +1307,20 @@ function connectRoom(code){
   ON.code=code;ON.closing=false;
   const proto=location.protocol==='https:'?'wss:':'ws:';
   const ws=new WebSocket(`${proto}//${location.host}/ws/${encodeURIComponent('ty-'+code)}`);ON.ws=ws;
-  ws.addEventListener('open',()=>{ON.retry=0;netNote('');wsSend({type:'join',playerId:pidGet()})});
-  ws.addEventListener('message',ev=>{if(ev.data==='__pong')return;let m;try{m=JSON.parse(ev.data)}catch(e){return}
+  ws.addEventListener('open',()=>{ON.retry=0;ON.lastPong=real();netNote('');wsSend({type:'join',playerId:pidGet()})});
+  ws.addEventListener('message',ev=>{ON.lastPong=real();if(ev.data==='__pong')return;let m;try{m=JSON.parse(ev.data)}catch(e){return}
     if(m.type==='state')onState(m);else if(m.type==='error'&&!/stale|already/.test(m.error||''))console.warn('server:',m.error)});
   ws.addEventListener('close',()=>{if(ON.closing||ON.ws!==ws)return;ON.retry=Math.min(ON.retry+1,5);netNote('Connection lost. Reconnecting…');setTimeout(()=>{if(!ON.closing&&ON.ws===ws)connectRoom(code)},500*2**(ON.retry-1))});
 }
-setInterval(()=>{if(ON.ws&&ON.ws.readyState===1)ON.ws.send('__ping')},30000);
+function reconnect(){if(!ON.code||ON.closing)return;const old=ON.ws;ON.ws=null;try{old&&old.close()}catch(e){}connectRoom(ON.code)}
+// heartbeat: phones silently kill connections in the background, so check every few seconds and reconnect if the server went quiet
+setInterval(()=>{const ws=ON.ws;if(!ws||ON.closing)return;if(ws.readyState===1){ws.send('__ping');if(real()-(ON.lastPong||real())>15)reconnect()}else if(ws.readyState>1)reconnect()},5000);
+// back in the game (after sharing the link on WhatsApp, switching apps, waking the phone): catch up at once
+function netResync(){if(!ON.code||ON.closing)return;const ws=ON.ws;
+  if(!ws||ws.readyState>1){reconnect();return}
+  if(ws.readyState===1){const t0=real();wsSend({type:'join',playerId:pidGet()});ws.send('__ping');setTimeout(()=>{if(ON.ws===ws&&(ON.lastPong||0)<t0)reconnect()},3000)}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)netResync()});
+addEventListener('pageshow',netResync);addEventListener('focus',netResync);addEventListener('online',netResync);
 function netNote(t){const n=$('#netNote');n.textContent=t;n.hidden=!t}
 function onState(m){
   ON.status=m.status;ON.connected=m.connected;const v=m.view;ON.view=v;
