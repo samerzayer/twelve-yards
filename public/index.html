@@ -375,7 +375,7 @@ a.btn{text-decoration:none;display:inline-block}
 <script>
 (()=>{
 const $=s=>document.querySelector(s);
-const cv=$('#cv'), ctx=cv.getContext('2d');
+const cv=$('#cv'), ctx=cv.getContext('2d');ctx.imageSmoothingQuality='high';
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const easeOut=t=>1-Math.pow(1-clamp(t,0,1),3), easeIn=t=>Math.pow(clamp(t,0,1),2), easeIO=t=>{t=clamp(t,0,1);return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2};
@@ -388,8 +388,11 @@ const BG={
   land:{src:'game/bg_land.webp',w:2688,h:1520,gl:852/2688,gr:1832/2688,gt:506/1520,gb:842/1520,bt:.4743,bb:.5296},
   port:{src:'game/bg_port.webp',w:1520,h:2688,gl:132/1520,gr:1386/1520,gt:834/2688,gb:1287/2688,bt:.4163,bb:.4565}
 };
-const SPR={k_idle:{fx:.494},k_crouch:{fx:.49},k_jump:{fx:.442},k_dive_high:{ax:.997,ay:.107},k_dive_low:{ax:.998,ay:.86},
-  s_red_stand:{fx:.514},s_red_kick:{fx:.708},s_red_cele:{fx:.528},s_blue_stand:{fx:.522},s_blue_kick:{fx:.772},s_blue_cele:{fx:.531}};
+// player art (Higgsfield, GPT Image 2.5). fx: feet x · ax/ay: glove anchor for dives · bx: body centre · hr: height vs the base pose, so the player stays the same size
+const SPR={k_idle:{fx:.526,hr:1},k_set:{fx:.526,hr:.996},k_dive_high:{ax:.997,ay:.153,bx:.531,hr:.776},k_dive_low:{ax:.997,ay:.663,bx:.495,hr:.521},
+  k_jump:{fx:.649,hr:1.432},k_crouch:{fx:.507,hr:.956},k_cele:{fx:.497,hr:1.142},k_sad:{fx:.526,hr:1.038},
+  p_stand:{fx:.503,hr:1},p_run1:{fx:.372,hr:1.008},p_run2:{fx:.413,hr:.977},p_kick:{fx:.704,hr:.982},p_follow:{fx:.614,hr:1.053},p_cele:{fx:.506,hr:1.19},p_sad:{fx:.509,hr:.994}};
+const POSES=['stand','run1','run2','kick','follow','cele','sad'];
 const IMG={};let loaded=0,total=0;
 function load(key,src){total++;const im=new Image();im.decoding='async';im.onload=()=>{loaded++;if(key.startsWith('bg_'))prepNet(key);onProgress()};im.onerror=()=>{loaded++;onProgress()};im.src=src;IMG[key]=im}
 load('bg_land',BG.land.src);load('bg_port',BG.port.src);
@@ -418,25 +421,21 @@ function hsl2rgb(h,s,l){if(!s)return[l*255,l*255,l*255];h/=360;const f=(p,q,t)=>
 const lum=hex=>{const[r,g,b]=hex2rgb(hex);return(.299*r+.587*g+.114*b)/255};
 const kitDist=(a,b)=>{const x=hex2rgb(a),y=hex2rgb(b);return Math.hypot(x[0]-y[0],x[1]-y[1],x[2]-y[2])};
 const KITS={};
-function kitFor(hex){ // {stand,kick,cele} canvases in this colour
-  if(KITS[hex])return KITS[hex];
-  const [th,ts,tl]=rgb2hsl(...hex2rgb(hex)),out={};
-  for(const pose of['stand','kick','cele']){
-    const src=IMG['s_blue_'+pose];if(!src||!src.naturalWidth)return null;
-    const c=document.createElement('canvas');c.width=src.naturalWidth;c.height=src.naturalHeight;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(src,0,0);
-    const d=g.getImageData(0,0,c.width,c.height),p=d.data,cw=c.width,N=p.length/4,isKit=new Uint8Array(N),isNum=new Uint8Array(N),lt=new Uint8Array(N);let sum=0,n=0;
-    for(let q=0;q<N;q++){const i=q*4;if(p[i+3]<8)continue;const[h,s2,l]=rgb2hsl(p[i],p[i+1],p[i+2]);const blue=h>195&&h<265;
-      if(l>.62&&(s2<.3||(blue&&l>.68)))lt[q]=1;else if(blue&&s2>.22){isKit[q]=1;sum+=l;n++}}
-    // the shirt number: light pixels with shirt on both sides
-    for(let q=0;q<N;q++){if(!lt[q])continue;const x=q%cw;let lf=false,rt=false;for(let dd=2;dd<=12;dd++){if(x-dd>=0&&isKit[q-dd])lf=true;if(x+dd<cw&&isKit[q+dd])rt=true}if(lf&&rt)isNum[q]=1;else if(rgb2hsl(p[q*4],p[q*4+1],p[q*4+2])[1]>.3){isKit[q]=1}}
-    const base=n?sum/n:.42,k=tl>.8?.6:tl<.25?.6:1,lightKit=lum(hex)>.6;
-    for(let q=0;q<N;q++){const i=q*4;
-      if(isNum[q]){const l3=rgb2hsl(p[i],p[i+1],p[i+2])[2],o=lightKit?hsl2rgb(225,.55,clamp(.14+(l3-.85)*.4,.06,.26)):hsl2rgb(0,0,clamp(l3+.05,.75,1));p[i]=o[0];p[i+1]=o[1];p[i+2]=o[2];continue}
-      if(!isKit[q])continue;const[,s2,l]=rgb2hsl(p[i],p[i+1],p[i+2]);const o=hsl2rgb(th,ts*clamp(s2/.7,.45,1.1),clamp(tl+(l-base)*k,0,1));p[i]=o[0];p[i+1]=o[1];p[i+2]=o[2]}
-    g.putImageData(d,0,0);out[pose]=c;
-  }
-  return KITS[hex]=out;
+function kitPose(hex,pose){ // the striker in a team colour: blue kit repainted with its shading, green number -> white (navy on light kits), soft edges blended
+  const key=hex+pose;if(KITS[key])return KITS[key];const src=IMG['p_'+pose];if(!src||!src.naturalWidth)return null;
+  const c=document.createElement('canvas');c.width=src.naturalWidth;c.height=src.naturalHeight;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(src,0,0);
+  const d=g.getImageData(0,0,c.width,c.height),p=d.data,N=p.length/4,wk=new Float32Array(N),wn=new Float32Array(N),LL=new Float32Array(N),SS=new Float32Array(N);
+  const [th,ts,tl]=rgb2hsl(...hex2rgb(hex)),light=lum(hex)>.6,k=tl>.8?.6:tl<.25?.6:1;let sum=0,n=0;
+  for(let q=0;q<N;q++){const i=q*4;if(p[i+3]<4)continue;const[h,s2,l]=rgb2hsl(p[i],p[i+1],p[i+2]);LL[q]=l;SS[q]=s2;if(s2<.2)continue;
+    const dn=Math.abs(h-120),dk=Math.min(Math.abs(h-225),360-Math.abs(h-225));let a1=clamp(1-(dn-30)/40,0,1),a2=clamp(1-(dk-40)/30,0,1);const tot=a1+a2;if(tot>1){a1/=tot;a2/=tot}
+    wn[q]=a1;wk[q]=a2;if(a2>.9){sum+=l;n++}}
+  const base=n?sum/n:.4;
+  for(let q=0;q<N;q++){const a2=wk[q],a1=wn[q];if(!a1&&!a2)continue;const i=q*4,l=LL[q],r0=1-a1-a2;
+    const kc=hsl2rgb(th,ts*clamp(SS[q]/.7,.45,1.1),clamp(tl+(l-base)*k,0,1)),nc=light?hsl2rgb(225,.55,clamp(.16+(l-.5)*.35,.06,.3)):hsl2rgb(0,0,clamp(.93+(l-.5)*.35,.72,1));
+    for(let ch=0;ch<3;ch++)p[i+ch]=p[i+ch]*r0+kc[ch]*a2+nc[ch]*a1}
+  g.putImageData(d,0,0);return KITS[key]=c;
 }
+function warmKits(hexes){let i=0;const jobs=[];hexes.forEach(h=>POSES.forEach(po=>jobs.push([h,po])));const go=()=>{if(i>=jobs.length)return;kitPose(...jobs[i++]);setTimeout(go,16)};go()} // a pose at a time, so nothing stutters
 const ink=hex=>lum(hex)>.6?'#070c1a':'#ffffff';
 const TM={you:store('ty_team')||'BHR',rival:'BRA',youHex:'#d01c2a',rivHex:'#f6d200'};
 function applyTeams(){ // pick colours (no clashes), repaint kits, recolour the HUD
@@ -444,7 +443,7 @@ function applyTeams(){ // pick colours (no clashes), repaint kits, recolour the 
   if(kitDist(rh,TM.youHex)<110)rh=lum(TM.youHex)>.6?'#1c2a5a':'#f2f2f2'; // clash: rival wears an away kit
   TM.rivHex=rh;const R=document.documentElement.style;
   R.setProperty('--you',TM.youHex);R.setProperty('--you-ink',ink(TM.youHex));R.setProperty('--rival',rh);R.setProperty('--rival-ink',ink(rh));
-  kitFor(TM.youHex);kitFor(TM.rivHex);
+  warmKits([TM.youHex,TM.rivHex]);
 }
 function pickBotTeam(){const ok=TEAMS.filter(t=>t[0]!==TM.you&&kitDist(t[2],teamOf(TM.you)[2])>140);TM.rival=ok[(Math.random()*ok.length)|0][0]}
 function renderTeamSel(){
@@ -454,8 +453,8 @@ function renderTeamSel(){
       el.innerHTML='<button class="tarrow" data-d="-1" aria-label="Previous team">‹</button><div class="tcur"><canvas width="52" height="124" aria-hidden="true"></canvas><div><small>YOUR TEAM</small><b></b></div></div><button class="tarrow" data-d="1" aria-label="Next team">›</button>';
       el.querySelectorAll('.tarrow').forEach(b=>b.addEventListener('click',()=>{const i=TEAMS.findIndex(x=>x[0]===TM.you);TM.you=TEAMS[(i+ +b.dataset.d+TEAMS.length)%TEAMS.length][0];store('ty_team',TM.you);renderTeamSel()}))}
     el.querySelector('b').textContent=t[1].toUpperCase();
-    const cv2=el.querySelector('canvas'),g=cv2.getContext('2d'),k=kitFor(t[2]);g.clearRect(0,0,52,124);
-    if(k){const im=k.stand,h=124,w=h*im.width/im.height;g.drawImage(im,26-w*SPR.s_blue_stand.fx,0,w,h)}
+    const cv2=el.querySelector('canvas'),g=cv2.getContext('2d'),im=kitPose(t[2],'stand');g.clearRect(0,0,52,124);g.imageSmoothingQuality='high';
+    if(im){const h=124,w=h*im.width/im.height;g.drawImage(im,26-w*SPR.p_stand.fx,0,w,h)}
   });
 }
 
@@ -596,68 +595,44 @@ function shadow(x,y,rx,ry,a){if(PX.on){const sp=pxSpr(PX.T.shadow);sp.anchor.set
 /* ---------------- Keeper ---------------- */
 // Keeper state is computed from the current anim; returns a draw function
 function drawKeeper(t){
-  const a=S.anim,gh=L.gh,idleH=gh*.68;
-  // pre-kick: on his toes, shuffling side to side
+  const a=S.anim,gh=L.gh,KH=gh*.64,kh=k=>KH*SPR[k].hr;
   const tense=a&&!a.fired&&t>a.t0?1:0;
   const sway=Math.sin(t*2.2)*L.gw*.012+tense*Math.sin(t*7.5)*L.gw*.01,hop=Math.abs(Math.sin(t*(4.4+tense*3)))*gh*(.012+tense*.01);
-  const idleAt=(x,alpha=1,squash=1,lift=0)=>{shadow(x,L.gb,gh*.23,gh*.045,.45*alpha);spr('k_idle',x,L.gb-lift,idleH,{alpha,sy:squash})};
-  const idle=(alpha=1,squash=1)=>idleAt(L.cx+sway,alpha,squash,squash<1?0:hop);
-  if(!a||a.kz===undefined||t<a.kick-.1){
-    if(a&&t>a.kick-.25){idle(1,lerp(1,.93,clamp((t-(a.kick-.25))/.15,0,1)));return}
-    idle();return;
-  }
-  const z=a.kz,tt=t-(a.kick-.1);
-  const p=clamp(tt/.46,0,1);
-  // after the play: saved -> celebrate with hops; conceded -> slump
-  const post=(x)=>{
-    if(a.fired&&a.outcome==='save'){const c=t-a.fireT;const b=Math.abs(Math.sin(c*8))*gh*.07*Math.max(0,1-c/2.2);idleAt(x,1,b>gh*.01?1:lerp(.94,1,b/(gh*.01)),b)}
-    else if(a.fired&&a.outcome==='goal'){idleAt(x,1,.95,0)}
-    else idleAt(x);
+  const pose=(k,x,lift=0,alpha=1)=>{if(alpha<=0)return;shadow(x,L.gb,gh*.23,gh*.045,.45*alpha);spr(k,x,L.gb-lift,kh(k),{alpha})};
+  // after the play: a save -> roar with little hops; a goal -> hands on hips; otherwise back to ready
+  const react=(x,alpha=1)=>{
+    if(a.fired&&a.outcome==='save'){const c=t-a.fireT;pose('k_cele',x,Math.abs(Math.sin(c*6))*gh*.04*Math.max(0,1-c/2.4),alpha)}
+    else if(a.fired&&a.outcome==='goal')pose('k_sad',x,0,alpha);else pose('k_idle',x,0,alpha);
   };
-  if(z<0){if(p<.3){idle(1,lerp(.93,1,p/.3));return}post(L.cx);return}
+  if(!a||a.kz===undefined||t<a.kick-.1){
+    if(a&&t>a.kick-.45){const u=clamp((t-(a.kick-.45))/.12,0,1),x=L.cx+sway*(1-u);pose('k_idle',x,hop*(1-u),1-u);pose('k_set',x,0,u);return} // drops into his set position
+    pose('k_idle',L.cx+sway,hop);return;
+  }
+  const z=a.kz,tt=t-(a.kick-.1),p=clamp(tt/.46,0,1);
+  if(z<0){if(p<.3)pose('k_set',L.cx);else react(L.cx);return} // stood his ground
   const Z=L.zones[z];
   if(Z.c===1){
-    if(Z.r===0){ // jump
-      const up=Math.sin(Math.PI*clamp(tt/.9,0,1));
-      shadow(L.cx,L.gb,gh*.2,gh*.04,.4*(1-up*.5));
-      if(p<.12)idle(1,.9);
-      else if(tt<.9)spr('k_jump',L.cx,L.gb-up*gh*.14,gh*.9);
-      else if(tt<1.05)idleAt(L.cx,1,lerp(.85,1,(tt-.9)/.15),0);
-      else post(L.cx);
-    }else{
-      if(p<.12)idle(1,.9);
-      else if(tt<.95){shadow(L.cx,L.gb,gh*.26,gh*.05,.45);spr('k_crouch',L.cx,L.gb,gh*.54)}
-      else if(tt<1.2){const r=(tt-.95)/.25;spr('k_crouch',L.cx,L.gb,gh*.54,{alpha:1-r});idleAt(L.cx,r,lerp(.75,1,easeOut(r)),0)}
-      else post(L.cx);
-    }
-    return;
+    if(p<.12){pose('k_set',L.cx);return}
+    const k=Z.r===0?'k_jump':'k_crouch',dur=Z.r===0?.9:.95;
+    if(tt<dur){const up=Z.r===0?Math.sin(Math.PI*clamp(tt/.9,0,1)):0;shadow(L.cx,L.gb,gh*.22,gh*.045,.42*(1-up*.5));spr(k,L.cx,L.gb-up*gh*.14,kh(k));return}
+    const r=clamp((tt-dur)/.22,0,1);if(r<1)spr(k,L.cx,L.gb,kh(k),{alpha:1-r});react(L.cx,r);return;
   }
-  const flip=Z.c===0,high=Z.r===0,key=high?'k_dive_high':'k_dive_low';
-  const h=high?gh*.47:gh*.32;
-  const im=IMG[key];const w=im&&im.naturalWidth?h*im.naturalWidth/im.naturalHeight:h*2;
-  const tx=Z.kx,ty=Z.ky;
-  const sx=L.cx+(flip?-1:1)*gh*.22,sy=L.gb-gh*.55;
-  if(p<.1){idle(1,.9);return}
+  const flip=Z.c===0,high=Z.r===0,key=high?'k_dive_high':'k_dive_low',A=SPR[key],h=kh(key);
+  const im=IMG[key],w=im&&im.naturalWidth?h*im.naturalWidth/im.naturalHeight:h*2;
+  const tx=Z.kx,ty=Z.ky,sx=L.cx+(flip?-1:1)*gh*.22,sy=L.gb-gh*.55;
+  if(p<.1){pose('k_set',L.cx);return}
   const q=easeOut((p-.1)/.9);
   let ax=lerp(sx,tx,q),ay=lerp(sy,ty,q)-Math.sin(Math.PI*q)*gh*(high?.12:.04);
   let rot=lerp((flip?1:-1)*(high?.9:1.1),0,q);
-  const after=tt-.46;
-  const restY=L.gb-h*(1-SPR[key].ay)*.95;
-  if(after>0){
-    const fall=easeIn(clamp(after/.4,0,1));ay=lerp(ty,Math.max(ty,restY),fall);rot=(flip?-1:1)*fall*.08;
-    // small bounce on landing
-    const bt=after-.4;if(bt>0&&bt<.25)ay-=Math.sin(Math.PI*bt/.25)*gh*.035;
-  }
-  const bodyX=ax+(flip?1:-1)*w*.45;
-  // get up and walk back to the middle
-  const GET=1.05,UP=.4,WALK=.7;
-  if(tt>GET){
+  const after=tt-.46,restY=L.gb-h*(1-A.ay)*.95;
+  if(after>0){const fall=easeIn(clamp(after/.4,0,1));ay=lerp(ty,Math.max(ty,restY),fall);rot=(flip?-1:1)*fall*.08;
+    const bt=after-.4;if(bt>0&&bt<.25)ay-=Math.sin(Math.PI*bt/.25)*gh*.035} // small bounce on landing
+  const bodyX=ax+(flip?1:-1)*w*(A.ax-A.bx);
+  const GET=1.05,UP=.35;
+  if(tt>GET){ // gets up where he landed and reacts
     const r=clamp((tt-GET)/UP,0,1);
     if(r<1){shadow(bodyX,L.gb,w*.5*(1-r),gh*.05,.4*(1-r));sprAnchor(key,ax,ay,h,flip,rot,1-r)}
-    const wk=easeIO(clamp((tt-GET-UP*.6)/WALK,0,1));
-    const x=lerp(bodyX,L.cx,wk),stepBob=wk>0&&wk<1?Math.abs(Math.sin(wk*Math.PI*4))*gh*.02:0;
-    if(wk<1){idleAt(x,r,lerp(.45,1,easeOut(r)),stepBob)}else post(L.cx);
-    return;
+    react(clamp(bodyX,L.gl+L.gw*.12,L.gr-L.gw*.12),easeOut(r));return;
   }
   shadow(bodyX,L.gb,w*.5,gh*.05,.35+.2*(after>0?1:q));
   if(!RM&&q<.95&&q>.05){for(let i=1;i<=3;i++){const qq=Math.max(0,q-i*.1);const gx=lerp(sx,tx,qq),gy=lerp(sy,ty,qq)-Math.sin(Math.PI*qq)*gh*(high?.12:.04);
@@ -666,20 +641,25 @@ function drawKeeper(t){
 }
 
 /* ---------------- Shooter ---------------- */
+function blendFrames(seq,t,fade){ // the frame to show now, cross-faded into the next one near each switch
+  let i=0;while(i+1<seq.length&&t>=seq[i+1][0])i++;
+  const nx=seq[i+1];if(nx&&t>nx[0]-fade)return[[seq[i][1],1],[nx[1],(t-(nx[0]-fade))/fade]];return[[seq[i][1],1]];
+}
 function drawShooter(t){
-  const a=S.anim,youShoot=a?a.shooter==='you':youShooting();
-  const h=L.sh,kit=kitFor(youShoot?TM.youHex:TM.rivHex);
-  let x=L.sx0,y=L.sy0,sc=1,pose='stand',bob=0;
+  const a=S.anim,youShoot=a?a.shooter==='you':youShooting(),h=L.sh,hex=youShoot?TM.youHex:TM.rivHex;
+  let x=L.sx0,y=L.sy0,sc=1,bob=0,frames=[['stand',1]];
   if(a){
-    const run=clamp((t-a.t0-.08)/(a.kick-.16-a.t0-.08),0,1),e=easeIO(run);
+    const T0=a.t0+.05,T1=a.kick-.08,run=clamp((t-T0)/(T1-T0),0,1),e=easeIO(run);
     x=lerp(L.sx0,L.sx1,e);y=lerp(L.sy0,L.sy1,e);sc=lerp(1,.95,e);
-    if(t>a.kick-.16&&t<a.kick+.22)pose='kick';
-    if(a.fired&&a.outcome==='goal'&&t>a.fireT+.05)pose='cele';
-    if(pose==='cele')bob=Math.abs(Math.sin((t-a.fireT)*5))*h*.03;
+    // stand -> jog -> plant -> strike -> follow-through -> celebrate or despair
+    const seq=[[-1,'stand'],[T0+.06,'run1'],[lerp(T0,T1,.6),'run2'],[a.kick-.06,'kick'],[a.kick+.12,'follow']];
+    if(a.fired)seq.push([a.fireT+.3,a.outcome==='goal'?'cele':'sad']);
+    frames=blendFrames(seq,t,.07);
+    if(run>0&&run<1)bob=Math.abs(Math.sin(run*Math.PI*2))*h*.012;
+    if(a.fired&&a.outcome==='goal'&&t>a.fireT+.3)bob=Math.abs(Math.sin((t-a.fireT)*5))*h*.03;
   }
   shadow(x,y,h*.22*sc,h*.05*sc,.5);
-  const key='s_'+(kit?'blue':youShoot?'blue':'red')+'_'+pose;
-  spr(key,x,y-bob,h*sc,{im:kit?kit[pose]:null});
+  for(const [po,al] of frames){const k='p_'+po;spr(k,x,y-bob,h*sc*SPR[k].hr,{im:kitPose(hex,po)||undefined,alpha:al})}
 }
 
 /* ---------------- Ball ---------------- */
@@ -1020,7 +1000,7 @@ function camTarget(t){ // calm broadcast camera: a gentle push-in during the kic
   const hw=W/(2*T.z),hh=H/(2*T.z);T.x=clamp(T.x,hw,W-hw);T.y=clamp(T.y,hh,H-hh);return T;
 }
 function draw(t){
-  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.clearRect(0,0,W,H);
+  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.clearRect(0,0,W,H);ctx.imageSmoothingQuality='high';
   if(!L)return;
   ctx.save();
   const Cm=S.cam,cz=Cm.z*(1+easeOut(S.zoom)*.05);
@@ -1071,7 +1051,10 @@ function ballState(t){ // where the ball is this frame (shared by both renderers
    cinematic colour in slow motion. If WebGL or the files are missing, the canvas renderer keeps going.
    Effects step down by themselves on slow phones (PX.fx 2 -> 1 -> 0). Add ?canvas to the URL to force the old renderer. */
 const PX={ok:false,on:false,fx:2,pool:[],used:0,tex:new Map(),bake:{},shocks:[],slow:0};
-function pxTex(src){let t=PX.tex.get(src);if(!t){t=PIXI.Texture.from(src);PX.tex.set(src,t)}return t}
+const mips=(w,h)=>Math.floor(Math.log2(Math.max(w,h,1)))+1;
+function pxTex(src){ // textures with mipmaps, so big art shrinks smoothly instead of looking jagged
+  let t=PX.tex.get(src);if(t)return t;const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,Src=src instanceof HTMLCanvasElement?PIXI.CanvasSource:PIXI.ImageSource;
+  t=new PIXI.Texture({source:new Src({resource:src,autoGenerateMipmaps:true,mipLevelCount:mips(w,h),maxAnisotropy:4,scaleMode:'linear'})});PX.tex.set(src,t);return t}
 function pxCanvas(w,h,fn){const c=document.createElement('canvas');c.width=Math.max(1,Math.ceil(w));c.height=Math.max(1,Math.ceil(h));fn(c.getContext('2d'),c.width,c.height);return c}
 const radial=(stops,n=128)=>pxCanvas(n,n,(g,w)=>{const gr=g.createRadialGradient(w/2,w/2,0,w/2,w/2,w/2);stops.forEach(([o,c])=>gr.addColorStop(o,c));g.fillStyle=gr;g.fillRect(0,0,w,w)});
 const loadScript=src=>new Promise((r,j)=>{const el=document.createElement('script');el.src=src;el.onload=r;el.onerror=j;document.head.appendChild(el)});
@@ -1102,8 +1085,8 @@ async function initPixi(){
 function pxBakeBg(key){ // floodlight glow is baked into the stadium image once, so it costs nothing per frame
   if(PX.bake[key])return PX.bake[key];const im=IMG[key];if(!im||!im.naturalWidth)return null;
   const base=pxTex(im);if(PX.fx<1)return PX.bake[key]=base;
-  try{const rt=PIXI.RenderTexture.create({width:base.width,height:base.height}),sp=new PIXI.Sprite(base);
-    sp.filters=[new PX.Bloom({threshold:.62,bloomScale:.9,brightness:1,blur:7,quality:5})];PX.app.renderer.render({container:sp,target:rt,clear:true});return PX.bake[key]=rt}
+  try{const rt=PIXI.RenderTexture.create({width:base.width,height:base.height,autoGenerateMipmaps:true,mipLevelCount:mips(base.width,base.height)}),sp=new PIXI.Sprite(base);
+    sp.filters=[new PX.Bloom({threshold:.62,bloomScale:.9,brightness:1,blur:7,quality:5})];PX.app.renderer.render({container:sp,target:rt,clear:true});rt.source.updateMipmaps();return PX.bake[key]=rt}
   catch(e){return PX.bake[key]=base}
 }
 function pxLayout(){
@@ -1379,7 +1362,7 @@ $('#lobbyBack').addEventListener('click',()=>{leaveOnline();S.mode='bot';$('#lob
 window.addEventListener('resize',resize);
 resize();renderBoard();requestAnimationFrame(loop);
 if(document.readyState==='complete')initPixi();else addEventListener('load',initPixi);
-window.TY={S,PX,ON,TM,AU}; // handy for debugging from the browser console
+window.TY={S,PX,ON,TM,AU,kitPose,IMG}; // handy for debugging from the browser console
 })();
 </script>
 </body>
