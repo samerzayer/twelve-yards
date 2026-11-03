@@ -78,9 +78,9 @@ function attach(ws, name) {
       }
       if (msg.type === 'reset') {
         if (!g.seats.includes(pid)) return err('spectators cannot reset');
-        const names = g.state ? g.state.names : {};
+        const names = g.state ? g.state.names : {}, teams = g.state ? g.state.teams : {};
         const enough = g.seats.length >= META.minPlayers;
-        g.state = enough ? { ...logic.setup(g.seats), names } : null;
+        g.state = enough ? { ...logic.setup(g.seats), names, teams } : null;
         g.status = enough ? 'playing' : 'waiting'; g.result = null;
         return broadcast(r);
       }

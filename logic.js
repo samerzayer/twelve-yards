@@ -67,6 +67,7 @@ export function validateAction(state, playerId, action) {
   if (!state.players.includes(playerId)) return { ok: false, error: "not a player" };
   if (action.t === "name") {
     if (typeof action.name !== "string" || action.name.length > 40) return { ok: false, error: "bad name" };
+    if (action.team !== undefined && !/^[A-Z]{3}$/.test(action.team)) return { ok: false, error: "bad team" };
     return { ok: true };
   }
   if (action.k !== state.k) return { ok: false, error: "stale kick" };
@@ -90,7 +91,9 @@ export function validateAction(state, playerId, action) {
 export function applyAction(state, playerId, action) {
   if (action.t === "name") {
     const name = action.name.replace(/[^\p{L}\p{N} _.-]/gu, "").trim().slice(0, 12);
-    return { ...state, names: { ...state.names, [playerId]: name } };
+    const teams = { ...(state.teams || {}) };
+    if (action.team) teams[playerId] = action.team;
+    return { ...state, names: { ...state.names, [playerId]: name }, teams };
   }
   const pending = { ...state.pending };
   if (action.t === "shot") pending.shot = { z: action.z, e: Math.round(action.e * 1000) / 1000, n: action.n | 0 };
@@ -143,6 +146,7 @@ export function viewFor(state, playerId) {
     youIdx: idx,
     opp,
     names: state.names,
+    teams: state.teams || {},
     k: state.k,
     res: { you: state.res[playerId] ?? [], opp: opp ? state.res[opp] ?? [] : [] },
     youShoot: state.players[state.k % 2] === playerId,
