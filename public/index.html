@@ -202,6 +202,10 @@ a.btn{text-decoration:none;display:inline-block}
 .dot.goal{background:var(--lime);border-color:var(--lime);color:#0b1400}
 .dot.next{box-shadow:0 0 0 3px rgba(198,255,61,.3)}
 #strike{width:100%}
+.read,.port .read,.land .read{left:50%;right:auto;top:auto;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));width:auto;max-width:calc(100% - 32px);box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:5px 18px;border:0;border-radius:0;clip-path:var(--slant);background:rgba(7,12,26,.82);white-space:nowrap}
+.read b{font-family:var(--cond);font-style:italic;font-weight:800;font-size:13px;letter-spacing:.14em;color:var(--muted);margin-right:2px}
+.read .c{font-family:var(--cond);font-style:italic;font-weight:800;font-size:15px;color:rgba(255,255,255,.6);padding:0 6px}
+.read .c.hot{color:#0b1400;background:var(--lime)}
 /* lower-third banner: ROUND 2 / MATCH POINT */
 .banner{position:absolute;left:0;right:0;top:40%;transform:translateY(-50%);pointer-events:none;text-align:center;overflow:hidden;padding:6px 0}
 .banner span{display:inline-block;font-family:var(--cond);font-style:italic;font-weight:900;font-size:clamp(30px,7vw,54px);letter-spacing:.05em;color:var(--navy);background:#fff;padding:2px 38px;clip-path:var(--slant);box-shadow:inset 0 -5px 0 var(--lime);animation:sweep 1.3s cubic-bezier(.2,.8,.2,1) both}
@@ -546,8 +550,7 @@ function layout(){
 function placeHud(){
   if(!L)return;
   $('#call').style.top=(L.gt+L.gh*.45)+'px';
-  if(!L.land){const top=$('.top').getBoundingClientRect().bottom+($('#prompt').hidden?8:84);$('#read').style.top=Math.min(top,L.gt-74)+'px';$('#read').style.bottom='auto'}
-  else{$('#read').style.top='auto'}
+
 }
 
 /* ---------------- Sprites ---------------- */
@@ -878,12 +881,10 @@ function renderBoard(){
 function renderRead(){
   const el=$('#read'),shooting=youShooting(),src=shooting?S.hist.botDives:S.hist.botShots;
   const cc=[0,0,0];let hi=0,tot=0;src.forEach(z=>{if(z>=0){cc[z%3]++;tot++;if(z<3)hi++}});
-  let html=`<h3>${shooting?'KEEPER\'S DIVES':'RIVAL\'S SHOTS'}<span>${tot?`${tot} SEEN`:''}</span></h3>`;
-  if(!tot)html+=`<div class="empty">${shooting?'No dives seen yet. He learns from your shots.':'No shots seen yet. Watch his habits.'}</div>`;
-  else{const mx=Math.max(...cc);
-    html+='<div class="bars">'+cc.map((v,i)=>`<div class="bar${v===mx&&v>0?' hot':''}"><span>${['Left','Centre','Right'][i]} · ${v}</span><span class="tr"><i style="width:${Math.round(v/tot*100)}%"></i></span></div>`).join('')+'</div>';
-    html+=`<div class="empty" style="margin-top:5px">${shooting?'Dives high':'Goes high'} ${Math.round(hi/tot*100)}% of the time</div>`;}
-  el.innerHTML=html;el.hidden=false;
+  if(!tot){el.hidden=true;return}
+  const mx=Math.max(...cc);
+  el.innerHTML=`<b>${shooting?'HE DIVES':'HE SHOOTS'}</b>`+cc.map((v,i)=>`<span class="c${v===mx?' hot':''}">${'LCR'[i]} ${Math.round(v/tot*100)}%</span>`).join('');
+  el.hidden=false;
 }
 function showCall(big,sub,good){const c=$('#call');$('#callBig').textContent=big;$('#callSub').textContent=sub;c.className='call show'+(good?' good':'');c.hidden=false}
 function hideCall(){$('#call').hidden=true;$('#call').className='call'}
@@ -968,17 +969,14 @@ function drawYou(t){ // bouncing "YOU" marker over the player you control this k
   ctx.restore();
 }
 /* camera: where to look and how close. Broadcast-style: keeper cam in your goal, close-up on the run-up, celebrations, replays */
-function camTarget(t){
-  const C={x:W/2,y:H/2,z:1},a=S.anim;if(RM||!L)return C;
-  const gy=L.gt+L.gh*.55;let T=C;
-  if(!a){if(S.phase==='keep'||(S.phase==='wait'&&!youShooting()))T={x:L.cx,y:lerp(gy,L.gb,.55),z:1.5}}
-  else if(a.isReplay)T={x:lerp(L.cx,a.tx,.35),y:gy,z:1.55};
-  else if(t<a.kick-.05){const k=clamp((t-a.t0)/(a.kick-a.t0),0,1);T={x:lerp(L.sx0,L.spot.x,.55),y:L.spot.y-L.sh*.4,z:lerp(1.15,1.38,easeOut(k))}}
-  else if(!a.fired)T={x:lerp(L.cx,a.tx,.3),y:gy,z:1.22};
-  else{const age=t-a.fireT;
-    if(age>.5&&a.outcome==='goal'&&a.shooter==='you')T={x:L.sx1,y:L.sy1-L.sh*.55,z:1.65}; // your celebration
-    else if(age>1&&a.outcome==='save'&&a.shooter!=='you')T={x:L.cx,y:L.gb-L.gh*.45,z:1.55}; // your save
-    else T={x:lerp(L.cx,a.tx,.3),y:gy,z:1.15}}
+function camTarget(t){ // calm broadcast camera: a gentle push-in during the kick only
+  const C={x:W/2,y:H/2,z:1},a=S.anim;if(RM||!L||!a)return C;
+  const gy=L.gt+L.gh*.55;let T;
+  if(a.isReplay)T={x:lerp(L.cx,a.tx,.25),y:gy,z:1.18};
+  else if(!a.fired){const k=clamp((t-a.t0)/(a.kick-a.t0+a.dur),0,1);T={x:lerp(W/2,lerp(L.cx,a.tx,.15),k),y:lerp(H/2,gy,k),z:lerp(1,1.08,easeIO(k))}}
+  else{const age=t-a.fireT,back=easeIO(clamp((age-1.2)/1,0,1));
+    if(a.outcome==='goal'&&a.shooter==='you'&&age>.4)T={x:lerp(L.cx,L.sx1,.25),y:lerp(gy,L.sy1-L.sh*.5,.3),z:1.1};
+    else T={x:lerp(L.cx,W/2,back),y:lerp(gy,H/2,back),z:lerp(1.08,1,back)}}
   const hw=W/(2*T.z),hh=H/(2*T.z);T.x=clamp(T.x,hw,W-hw);T.y=clamp(T.y,hh,H-hh);return T;
 }
 function draw(t){
@@ -1034,7 +1032,7 @@ function update(){
   if(a&&a.isReplay)target=.5;
   S.ts=lerp(S.ts,target,Math.min(1,dt*10));
   const gdt=dt*S.ts;S.clock+=gdt;const t=S.clock;
-  if(L){const T=camTarget(t),k=1-Math.exp(-dt*(a?4.5:3));S.cam.x=lerp(S.cam.x||W/2,T.x,k);S.cam.y=lerp(S.cam.y||H/2,T.y,k);S.cam.z=lerp(S.cam.z,T.z,k)}
+  if(L){const T=camTarget(t),k=1-Math.exp(-dt*2.5);S.cam.x=lerp(S.cam.x||W/2,T.x,k);S.cam.y=lerp(S.cam.y||H/2,T.y,k);S.cam.z=lerp(S.cam.z,T.z,k)}
   if(['aim','power','keep'].includes(S.phase)){
     const left=Math.max(0,S.deadline-rt);$('#tbar').style.transform=`scaleX(${left/S.dur})`;
     if(left<=0){
