@@ -424,10 +424,15 @@ function kitFor(hex){ // {stand,kick,cele} canvases in this colour
   for(const pose of['stand','kick','cele']){
     const src=IMG['s_blue_'+pose];if(!src||!src.naturalWidth)return null;
     const c=document.createElement('canvas');c.width=src.naturalWidth;c.height=src.naturalHeight;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(src,0,0);
-    const d=g.getImageData(0,0,c.width,c.height),p=d.data,isKit=new Uint8Array(p.length/4);let sum=0,n=0;
-    for(let i=0;i<p.length;i+=4){if(p[i+3]<8)continue;const[h,s2,l]=rgb2hsl(p[i],p[i+1],p[i+2]);if(h>195&&h<265&&s2>.22){isKit[i/4]=1;sum+=l;n++}}
-    const base=n?sum/n:.42,k=tl>.8?.6:tl<.25?.6:1;
-    for(let i=0;i<p.length;i+=4){if(!isKit[i/4])continue;const[,s2,l]=rgb2hsl(p[i],p[i+1],p[i+2]);const o=hsl2rgb(th,ts*clamp(s2/.7,.45,1.1),clamp(tl+(l-base)*k,0,1));p[i]=o[0];p[i+1]=o[1];p[i+2]=o[2]}
+    const d=g.getImageData(0,0,c.width,c.height),p=d.data,cw=c.width,N=p.length/4,isKit=new Uint8Array(N),isNum=new Uint8Array(N),lt=new Uint8Array(N);let sum=0,n=0;
+    for(let q=0;q<N;q++){const i=q*4;if(p[i+3]<8)continue;const[h,s2,l]=rgb2hsl(p[i],p[i+1],p[i+2]);const blue=h>195&&h<265;
+      if(l>.62&&(s2<.3||(blue&&l>.68)))lt[q]=1;else if(blue&&s2>.22){isKit[q]=1;sum+=l;n++}}
+    // the shirt number: light pixels with shirt on both sides
+    for(let q=0;q<N;q++){if(!lt[q])continue;const x=q%cw;let lf=false,rt=false;for(let dd=2;dd<=12;dd++){if(x-dd>=0&&isKit[q-dd])lf=true;if(x+dd<cw&&isKit[q+dd])rt=true}if(lf&&rt)isNum[q]=1;else if(rgb2hsl(p[q*4],p[q*4+1],p[q*4+2])[1]>.3){isKit[q]=1}}
+    const base=n?sum/n:.42,k=tl>.8?.6:tl<.25?.6:1,lightKit=lum(hex)>.6;
+    for(let q=0;q<N;q++){const i=q*4;
+      if(isNum[q]){const l3=rgb2hsl(p[i],p[i+1],p[i+2])[2],o=lightKit?hsl2rgb(225,.55,clamp(.14+(l3-.85)*.4,.06,.26)):hsl2rgb(0,0,clamp(l3+.05,.75,1));p[i]=o[0];p[i+1]=o[1];p[i+2]=o[2];continue}
+      if(!isKit[q])continue;const[,s2,l]=rgb2hsl(p[i],p[i+1],p[i+2]);const o=hsl2rgb(th,ts*clamp(s2/.7,.45,1.1),clamp(tl+(l-base)*k,0,1));p[i]=o[0];p[i+1]=o[1];p[i+2]=o[2]}
     g.putImageData(d,0,0);out[pose]=c;
   }
   return KITS[hex]=out;
@@ -456,9 +461,10 @@ function renderTeamSel(){
 
 /* ---------------- Difficulty ---------------- */
 const DIFF=[
-  {name:'AMATEUR',note:'Slow meter. Rival keeper guesses. Rival shooter has obvious habits.',needle:5.4,ramp:.3,learn:.5,fav:2.6,botAcc:.72,botTop:.55,keepTime:5},
-  {name:'PRO',note:'Faster meter. Keeper learns your favourite side.',needle:6.6,ramp:.35,learn:1.3,fav:1.8,botAcc:.58,botTop:.85,keepTime:4.2},
-  {name:'LEGEND',note:'Fast meter, sharp keeper, rival mixes it up. Good luck.',needle:7.8,ramp:.4,learn:2.2,fav:1.25,botAcc:.48,botTop:1.1,keepTime:3.6}
+  // thr: on-target window x · save: rival keeper's save chance x · ksave: your save chance x · surge: meter speed swings
+  {name:'AMATEUR',needle:3.9,ramp:.15,surge:.3,thr:1.3,save:.72,ksave:1.18,learn:.3,fav:2.6,botAcc:.62,botTop:.55,keepTime:5.5},
+  {name:'PRO',needle:6.0,ramp:.3,surge:.5,thr:1,save:1,ksave:1,learn:1.1,fav:1.8,botAcc:.58,botTop:.85,keepTime:4.5}, // also used online (server rules = PRO)
+  {name:'LEGEND',needle:7.6,ramp:.4,surge:.6,thr:.88,save:1.08,ksave:.92,learn:2.1,fav:1.25,botAcc:.5,botTop:1.1,keepTime:3.6}
 ];
 let diff=1;
 function store(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k)||'null');localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}}
@@ -476,18 +482,20 @@ const S={phase:'menu',turn:0,res:{you:[],rival:[]},hist:{youShots:[],youDives:[]
 
 /* ---------------- Audio (synthesised) ---------------- */
 const AU={c:null,
-  init(){ if(this.c){if(this.c.state==='suspended')this.c.resume();return}
+  init(){ if(this.c){this.wake();return}
     try{const C=window.AudioContext||window.webkitAudioContext;this.c=new C();this.m=this.c.createGain();this.m.gain.value=S.mute?0:.8;this.m.connect(this.c.destination);
       const b=this.c.createBuffer(1,this.c.sampleRate*2,this.c.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;this.nb=b;
-      const s=this.src(),f=this.c.createBiquadFilter(),g=this.c.createGain();f.type='bandpass';f.frequency.value=460;f.Q.value=.55;g.gain.value=.05;s.connect(f).connect(g).connect(this.m);s.start();this.bed=g;this.loadVO();
+      // brown noise: a soft crowd rumble instead of hiss
+      const bb=this.c.createBuffer(2,this.c.sampleRate*4,this.c.sampleRate);for(let ch=0;ch<2;ch++){const e=bb.getChannelData(ch);let v=0;for(let i=0;i<e.length;i++){v=(v+.02*(Math.random()*2-1))/1.02;e[i]=v*3.5}}this.bn=bb;
+      const s=this.src(true),f=this.c.createBiquadFilter(),g=this.c.createGain();f.type='lowpass';f.frequency.value=700;g.gain.value=.09;s.connect(f).connect(g).connect(this.m);s.start();this.bed=g;this.loadVO();
     }catch(e){this.c=null}},
-  src(){const s=this.c.createBufferSource();s.buffer=this.nb;s.loop=true;return s},
-  tense(on){if(!this.c)return;this.bed.gain.setTargetAtTime(on?.022:.05,this.c.currentTime,.4)},
-  roar(lv=1,dur=2,fq=900){if(!this.c)return;const c=this.c,t=c.currentTime,s=this.src(),f=c.createBiquadFilter(),g=c.createGain();
-    f.type='bandpass';f.frequency.setValueAtTime(fq*.6,t);f.frequency.linearRampToValueAtTime(fq,t+.35);f.Q.value=.5;
-    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.45*lv,t+.15);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
-    s.connect(f).connect(g).connect(this.m);s.start(t);s.stop(t+dur+.1)},
-  groan(){if(!this.c)return;const c=this.c,t=c.currentTime,s=this.src(),f=c.createBiquadFilter(),g=c.createGain();
+  src(brown){const s=this.c.createBufferSource();s.buffer=brown?this.bn:this.nb;s.loop=true;return s},
+  tense(on){if(!this.c)return;this.bed.gain.setTargetAtTime(on?.05:.09,this.c.currentTime,.5)},
+  roar(lv=1,dur=2,fq=900){if(!this.c)return;const c=this.c,t=c.currentTime;
+    [[fq*.55,.9],[fq*1.1,.5]].forEach(([f0,q])=>{const s=this.src(true),f=c.createBiquadFilter(),g=c.createGain();f.type='bandpass';f.frequency.setValueAtTime(f0*.7,t);f.frequency.linearRampToValueAtTime(f0,t+.5);f.Q.value=q;
+      g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.55*lv,t+.35);g.gain.setValueAtTime(.55*lv,t+dur*.45);g.gain.exponentialRampToValueAtTime(.0001,t+dur*1.3);
+      s.connect(f).connect(g).connect(this.m);s.start(t,Math.random()*2);s.stop(t+dur*1.35)})},
+  groan(){if(!this.c)return;const c=this.c,t=c.currentTime,s=this.src(true),f=c.createBiquadFilter(),g=c.createGain();
     f.type='lowpass';f.frequency.setValueAtTime(700,t);f.frequency.linearRampToValueAtTime(240,t+1.2);
     g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.32,t+.12);g.gain.exponentialRampToValueAtTime(.0001,t+1.5);
     s.connect(f).connect(g).connect(this.m);s.start(t);s.stop(t+1.6)},
@@ -519,10 +527,23 @@ const AU={c:null,
   tick(p=1){if(!this.c)return;const c=this.c,t=c.currentTime,o=c.createOscillator(),g=c.createGain();o.type='square';o.frequency.value=660*p;g.gain.setValueAtTime(.05,t);g.gain.exponentialRampToValueAtTime(.001,t+.09);o.connect(g).connect(this.m);o.start(t);o.stop(t+.1)},
   // recorded match commentary (ElevenLabs via Higgsfield)
   vo:{},voCur:null,
-  loadVO(){if(!this.c||this.voLoading)return;this.voLoading=true;['goal1','goal2','save','bar','barin','miss','win','lose','decisive','intro'].forEach(n=>fetch('game/vo/'+n+'.mp3').then(r=>r.arrayBuffer()).then(b=>this.c.decodeAudioData(b)).then(buf=>{this.vo[n]=buf}).catch(()=>{}))},
-  say(n,delay=0){if(!this.c||!this.vo[n])return;try{if(this.voCur)this.voCur.stop()}catch(e){}const s=this.c.createBufferSource(),g=this.c.createGain();s.buffer=this.vo[n];g.gain.value=1.15;s.connect(g).connect(this.m);s.start(this.c.currentTime+delay);this.voCur=s},
+  loadVO(){if(!this.c||this.voLoading)return;this.voLoading=true;['goal1','goal2','goal4','goallow','goalmid','wrongway','power','save','bar','barin','post','miss','win','win2','lose','lose2','decisive','intro'].forEach(n=>fetch('game/vo/'+n+'.mp3').then(r=>r.arrayBuffer()).then(b=>this.c.decodeAudioData(b)).then(buf=>{this.vo[n]=buf}).catch(()=>{}))},
+  recent:[],
+  pick(opts){const ok=opts.filter(n=>this.vo[n]&&!this.recent.includes(n));const n=ok.length?ok[(Math.random()*ok.length)|0]:null;if(n){this.recent.push(n);if(this.recent.length>3)this.recent.shift()}return n}, // never the same line twice in a row
+  say(n,delay=0){if(!this.c||!n||!this.vo[n])return;try{if(this.voCur)this.voCur.stop()}catch(e){}const s=this.c.createBufferSource(),g=this.c.createGain();s.buffer=this.vo[n];s.playbackRate.value=.97+Math.random()*.06;g.gain.value=1.15;s.connect(g).connect(this.m);s.start(this.c.currentTime+delay);this.voCur=s},
+  // bring sound back after the tab was hidden, the app was switched or the phone interrupted audio (iPhone: 'interrupted')
+  wake(){const c=this.c;if(!c)return;if(c.state==='closed'){this.c=null;this.voLoading=false;this.init();return}if(c.state!=='running')c.resume().catch(()=>{})},
   setMute(m){if(this.m)this.m.gain.value=m?0:.8}
 };
+
+// pause sound while the game is in the background, wake it on return; if the phone wants a tap first, the next tap does it
+document.addEventListener('visibilitychange',()=>{if(!AU.c)return;if(document.hidden)AU.c.suspend().catch(()=>{});else AU.wake()});
+addEventListener('pageshow',()=>AU.wake());addEventListener('focus',()=>AU.wake());
+['pointerdown','touchend','keydown'].forEach(ev=>document.addEventListener(ev,()=>AU.wake(),{capture:true,passive:true}));
+// speaker button (remembers your choice)
+S.mute=store('ty_mute')===true;
+function showMute(){$('#icoOn').hidden=S.mute;$('#icoOff').hidden=!S.mute;$('#mute').setAttribute('aria-label',S.mute?'Turn sound on':'Mute sound')}
+$('#mute').addEventListener('click',()=>{S.mute=!S.mute;store('ty_mute',S.mute);AU.init();AU.setMute(S.mute);showMute()});showMute();
 
 /* ---------------- Layout ---------------- */
 function resize(){
@@ -715,12 +736,14 @@ function showRole(shoot,sub,hot){ // big card at the start of every kick: are yo
 function setDeadline(d){S.dur=d;S.deadline=real()+d}
 function setPrompt(r,h){$('#role').innerHTML=r;$('#hint').textContent=h}
 const THR=z=>{const c=z%3,r=(z/3)|0;return r===0?(c===1?.55:.4):(c===1?.85:.6)};
+const DD=()=>online()?DIFF[1]:DIFF[diff]; // online always plays to PRO rules
+const myThr=z=>Math.min(.95,THR(z)*DD().thr); // your on-target window
 function pickAim(z){
   S.aim=z;S.phase='power';S.meterStart=real();setDeadline(3.5);
   const sd=S.res.you.length>=5;
-  const MD=online()?DIFF[1]:DIFF[diff]; // online is always PRO so both players get the same meter
+  const MD=DD(); // online is always PRO so both players get the same meter
   S.speed=MD.needle+MD.ramp*Math.min(S.yourKicks,6)+(sd?.8:0);S.mPhase=Math.random()*6.28;S.mVar=Math.random()*6.28;S.mLast=real();
-  const thr=Math.min(1,THR(z));
+  const thr=myThr(z);
   const a=(.5-thr/2)*100,b=(.5+thr/2)*100;
   $('.track').style.background=`linear-gradient(90deg,#5c0f16 0%,#ff4048 ${a-.1}%,#3ddc84 ${a+.1}%,#3ddc84 44%,#ffd34d 44%,#ffd34d 56%,#3ddc84 56%,#3ddc84 ${b-.1}%,#ff4048 ${b+.1}%,#5c0f16 100%)`;
   $('#meter').hidden=false;$('#read').hidden=true;$('#mZone').textContent=['TOP','LOW'][(z/3)|0]+' '+['LEFT','CENTRE','RIGHT'][z%3];
@@ -765,8 +788,8 @@ function launch(o,R=Math.random){
   const rr=(a,b)=>a+R()*(b-a);
   const t=S.clock,Z=L.zones[o.zone],c=Z.c,r=Z.r,corner=c!==1,high=r===0;
   let outcome='goal',kind='';
-  if(o.e>THR(o.zone)){outcome='miss';kind=high&&R()<.3?'bar':high&&(!corner||R()<.55)?'over':(R()<.3?'post':'wide')}
-  else if(R()<saveChance(o.zone,o.kz,o.e))outcome='save';
+  if(o.e>(o.shooter==='you'?myThr(o.zone):THR(o.zone))){outcome='miss';kind=high&&R()<.3?'bar':high&&(!corner||R()<.55)?'over':(R()<.3?'post':'wide')}
+  else if(R()<clamp(saveChance(o.zone,o.kz,o.e)*(o.shooter==='you'?DD().save:DD().ksave),0,.98))outcome='save';
   else if(high&&o.e>.2&&R()<.2)kind='barin';
   if(o.forced){outcome=o.forced.outcome;kind=o.forced.kind||(outcome==='miss'?'wide':'')}
   const j=o.e*L.gw*.05;
@@ -802,7 +825,7 @@ function fire(t){
     sub=a.kind==='barin'?'Off the bar and in!':a.corner&&a.high?'Top bins. No chance.':a.kz===a.zone?'He guessed right. Too much power.':a.kz>=0&&L.zones[a.kz].c===L.zones[a.zone].c?'Right side, wrong height.':you?'Sent him the wrong way.':'He sent you the wrong way.';
     S.bulge={x:a.tx,y:a.kind==='barin'?L.gt+L.gh*.55:a.ty,t0:t};AU.swish();S.ledGoal=t;S.zoom=1;
     pxShock(S.bulge.x,S.bulge.y,'net');if(you||a.decisive)pxShock(a.tx,a.ty,'goal');if(a.kind==='barin')pxShock(a.tx,a.ty,'wood');
-    if(you){S.excite=1;AU.roar(1.1,2.6,1000);AU.horn();confetti([TM.youHex,'#ffffff','#c6ff3d']);S.flash=.22;S.shake=RM?0:10}
+    if(you){S.excite=1;AU.roar(1.1,2.6,1000);confetti([TM.youHex,'#ffffff','#c6ff3d']);S.flash=.22;S.shake=RM?0:10}
     else{S.excite=.5;AU.roar(.7,1.9,700)}
   }else if(a.outcome==='save'){
     big='Saved';good=!you;
@@ -819,7 +842,7 @@ function fire(t){
     if(you)AU.groan();else{S.excite=.8;AU.roar(.9,2,900)}
   }
   showCall(big,sub,good);a.next=t+(a.decisive?2.6:(a.outcome==='goal'&&you)||(a.outcome==='save'&&!you)?2.5:2.1);
-  if(!a.decisive)AU.say(a.outcome==='goal'?(a.kind==='barin'?'barin':Math.random()<.5?'goal1':'goal2'):a.outcome==='save'?'save':a.kind==='bar'?'bar':'miss',.12);
+  if(!a.decisive)AU.say(commentFor(a),.12);
 }
 function startReplay(a,t){ // slow-motion action replay of the big moments
   S.lastReplay=S.turn;hideCall();S.bulge=null;S.sparks=[];
@@ -832,6 +855,14 @@ function fireReplay(t){
   if(a.outcome==='goal'){S.bulge={x:a.tx,y:a.kind==='barin'?L.gt+L.gh*.55:a.ty,t0:t};AU.swish();pxShock(S.bulge.x,S.bulge.y,'net');if(a.kind==='barin'){AU.clang();spark(a.tx,a.ty)}}
   else if(a.outcome==='save'){const p=ballAt(a,.86),dir=Math.abs(p.x-L.cx)<L.gw*.05?1:Math.sign(p.x-L.cx);a.def={x:p.x,y:p.y,r:p.r,vx:dir*L.gw*.9,vy:-L.gh*(a.high?2.4:1.3),t0:t};AU.thump();spark(p.x,p.y)}
   else if(a.kind==='bar'||a.kind==='post'){AU.clang();spark(a.tx,a.ty);a.def={x:a.tx,y:a.ty,r:ballAt(a,1).r,vx:(a.tx<L.cx?-1:1)*L.gw*.3,vy:-L.gh*1.4,t0:t}}
+}
+function commentFor(a){ // a line that matches the kick: where it went, how, and what the keeper did
+  if(a.outcome==='goal'){if(a.kind==='barin')return AU.pick(['barin']);
+    const c=L.zones[a.zone].c,high=a.zone<3,o=[high&&c!==1?'goal2':c!==1?'goallow':'goalmid','goal1','goal4'];
+    if(a.kz>=0&&L.zones[a.kz].c!==c)o.push('wrongway');if(a.e<.12)o.push('power');return AU.pick(o)}
+  if(a.outcome==='save')return Math.random()<.75?AU.pick(['save']):null;
+  if(a.kind==='bar')return AU.pick(['bar']);if(a.kind==='post')return AU.pick(['post']);
+  return Math.random()<.55?AU.pick(['miss']):null; // only one miss line, so it isn't said every time
 }
 function checkEnd(){
   const a=S.res.you.length,b=S.res.rival.length,ga=goals('you'),gb=goals('rival');
@@ -852,8 +883,8 @@ function endGame(){
   $('#oStats').innerHTML=`<div class="stat"><b>${st.goals}/${st.shots}</b><span>SCORED</span></div><div class="stat"><b>${st.saves}</b><span>SAVES</span></div><div class="stat"><b>${st.power}</b><span>POWER</span></div>`;
   $('#oYou').innerHTML=dotsHTML(S.res.you,99);$('#oRival').innerHTML=dotsHTML(S.res.rival,99);
   $('#copied').textContent='';$('#shareBox').hidden=true;$('#over').className='screen '+(win?'won':'lost');$('#over').hidden=false;
-  if(win){S.excite=1;confetti(['#2f6bff','#ff7a1a','#ffffff','#ffd34d'],160);AU.roar(1.2,3,1000);AU.horn()}else AU.groan();
-  AU.say(win?'win':'lose',.5);
+  if(win){S.excite=1;confetti(['#2f6bff','#ff7a1a','#ffffff','#ffd34d'],160);AU.roar(1.2,3,1000)}else AU.groan();
+  AU.say(AU.pick(win?['win','win2']:['lose','lose2']),.5);
   // reveal kick by kick: the score counts up as each dot pops in, then the stars land
   const rY=[...$('#oYou').children],rR=[...$('#oRival').children],seq=[];
   for(let i=0;i<Math.max(rY.length,rR.length);i++){if(rY[i])seq.push([rY[i],'y']);if(rR[i])seq.push([rR[i],'r'])}
@@ -1201,12 +1232,11 @@ function update(){
       else if(S.phase==='keep'){if(online())pickDive(-1);else launch({shooter:'rival',zone:S.pending.z,e:S.pending.e,kz:-1})}
     }
   }
-  // crowd: rhythmic claps while you line up, a heartbeat on match point
+  // a heartbeat on match point
   if(['aim','power','keep','wait'].includes(S.phase)&&rt>=S.nextBeat){
-    if(S.decisive){AU.heart();S.nextBeat=rt+.72}
-    else{const k=S.beatN++%5;AU.clap(.9);S.nextBeat=rt+(k<2?.42:k<4?.21:1.15)}
+    if(S.decisive){AU.heart();S.nextBeat=rt+.72}else S.nextBeat=rt+1
   }
-  if(S.phase==='power'){const el=rt-S.meterStart,sp=S.speed*(1+.6*Math.sin(el*3.1+S.mVar)+.25*Math.sin(el*7.3));S.mPhase+=dt*Math.max(1.5,sp);S.needle=.5+.5*Math.sin(S.mPhase);$('#needle').style.left=(S.needle*100)+'%'}
+  if(S.phase==='power'){const el=rt-S.meterStart,sp=S.speed*(1+DD().surge*Math.sin(el*3.1+S.mVar)+.25*Math.sin(el*7.3));S.mPhase+=dt*Math.max(1.5,sp);S.needle=.5+.5*Math.sin(S.mPhase);$('#needle').style.left=(S.needle*100)+'%'}
   if(a){
     if(!a.kicked&&t>=a.kick){a.kicked=true;AU.kick()}
     const trig=a.kick+a.dur*(a.outcome==='save'?.86:1);
@@ -1349,7 +1379,7 @@ $('#lobbyBack').addEventListener('click',()=>{leaveOnline();S.mode='bot';$('#lob
 window.addEventListener('resize',resize);
 resize();renderBoard();requestAnimationFrame(loop);
 if(document.readyState==='complete')initPixi();else addEventListener('load',initPixi);
-window.TY={S,PX,ON,TM}; // handy for debugging from the browser console
+window.TY={S,PX,ON,TM,AU}; // handy for debugging from the browser console
 })();
 </script>
 </body>
