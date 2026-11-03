@@ -4,6 +4,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import * as logic from './logic.js';
 
@@ -11,6 +12,7 @@ const PORT = +process.env.PORT || 8080;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.json': 'application/json' };
 const META = logic.meta;
+const GZ = new Map(); // gzipped copies of static files, built on first request
 const rooms = new Map(); // name -> {game:{status,seats,state,result}, conns: Map<ws, playerId>, touched}
 
 const server = http.createServer(async (req, res) => {
@@ -23,7 +25,14 @@ const server = http.createServer(async (req, res) => {
     // WhatsApp link previews need a full image URL, so fill in this server's address
     const host = String(req.headers.host || '');
     if (p === '/index.html' && /^[\w.:-]+$/.test(host)) body = Buffer.from(body.toString().replace(/content="\/game\//g, `content="http://${host}/game/`));
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': p.endsWith('.html') ? 'no-cache' : 'public, max-age=86400' });
+    const type = TYPES[extname(file)] || 'application/octet-stream', headers = { 'content-type': type, 'cache-control': p.endsWith('.html') ? 'no-cache' : 'public, max-age=86400', vary: 'accept-encoding' };
+    // gzip text files (the game page and the PixiJS library shrink to about a quarter)
+    if (/text|javascript|json/.test(type) && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+      let z = p === '/index.html' ? null : GZ.get(file);
+      if (!z) { z = gzipSync(body, { level: 9 }); if (p !== '/index.html') GZ.set(file, z); }
+      headers['content-encoding'] = 'gzip'; body = z;
+    }
+    res.writeHead(200, headers);
     res.end(body);
   } catch { res.writeHead(404).end('not found'); }
 });

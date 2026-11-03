@@ -256,8 +256,8 @@ a.btn{text-decoration:none;display:inline-block}
 .banner.hot .rc small{background:var(--rival);color:#fff;padding:1px 10px;opacity:1}
 /* screen edge colour: your team colour when shooting, lime when in goal */
 .roleframe{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s}
-.roleframe.shoot{opacity:1;box-shadow:inset 0 0 0 3px var(--you),inset 0 0 110px color-mix(in srgb,var(--you) 45%,transparent)}
-.roleframe.keep{opacity:1;box-shadow:inset 0 0 0 3px var(--lime),inset 0 0 110px rgba(198,255,61,.32)}
+.roleframe.shoot{opacity:1;box-shadow:inset 0 0 140px color-mix(in srgb,var(--you) 16%,transparent)}
+.roleframe.keep{opacity:1;box-shadow:inset 0 0 140px rgba(198,255,61,.12)}
 .replaytag{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:calc(70px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:8px;font-family:var(--cond);font-style:italic;font-weight:900;font-size:22px;letter-spacing:.12em;color:#fff;background:rgba(7,12,26,.85);padding:4px 16px;clip-path:var(--slant);pointer-events:none}
 .replaytag i{width:10px;height:10px;border-radius:50%;background:var(--rival);animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:0}}
@@ -394,7 +394,7 @@ const IMG={};let loaded=0,total=0;
 function load(key,src){total++;const im=new Image();im.decoding='async';im.onload=()=>{loaded++;if(key.startsWith('bg_'))prepNet(key);onProgress()};im.onerror=()=>{loaded++;onProgress()};im.src=src;IMG[key]=im}
 load('bg_land',BG.land.src);load('bg_port',BG.port.src);
 Object.keys(SPR).forEach(k=>load(k,'game/'+k+'.webp'));load('ball','game/ball.webp');
-function onProgress(){const b=$('#start');if(loaded>=total){renderTeamSel();b.disabled=false;b.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3.5l15 8.5-15 8.5z"/></svg>PLAY';resize()}else b.textContent=`LOADING ${Math.round(loaded/total*100)}%`}
+function onProgress(){const b=$('#start');if(loaded>=total){renderTeamSel();if(PX.ok)PX.bake={};b.disabled=false;b.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3.5l15 8.5-15 8.5z"/></svg>PLAY';resize()}else b.textContent=`LOADING ${Math.round(loaded/total*100)}%`}
 const NET={};
 function prepNet(key){ // copy the white net/post pixels over the LED band so scrolling text sits behind the net
   try{
@@ -526,8 +526,9 @@ const AU={c:null,
 
 /* ---------------- Layout ---------------- */
 function resize(){
-  const r=cv.getBoundingClientRect();DPR=Math.min(2,window.devicePixelRatio||1);W=r.width;H=r.height;
-  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);layout();placeHud();
+  const r=cv.getBoundingClientRect();DPR=PX.fx===0?1:Math.min(2,window.devicePixelRatio||1);W=r.width;H=r.height;
+  if(PX.ok){cv.width=cv.height=1}else{cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR)} // with the GPU renderer, #cv only catches taps
+  layout();placeHud();if(PX.ok)pxLayout();
 }
 function layout(){
   const land=W/H>=.85,b=land?BG.land:BG.port;
@@ -557,6 +558,7 @@ function placeHud(){
 function spr(key,x,y,h,o={}){ // draw sprite with feet (fx) at x,y and height h
   const im=o.im||IMG[key],iw=im&&(im.naturalWidth||im.width),ih=im&&(im.naturalHeight||im.height);if(!iw)return;
   const w=h*iw/ih,fx=(SPR[key].fx??.5);
+  if(PX.on){const sp=pxSpr(pxTex(im));sp.anchor.set(fx,1);sp.position.set(x,y);sp.rotation=o.rot||0;sp.scale.set((o.flip?-1:1)*w/iw,(o.sy||1)*h/ih);sp.alpha=o.alpha??1;return}
   ctx.save();ctx.globalAlpha=o.alpha??1;ctx.translate(x,y);if(o.rot)ctx.rotate(o.rot);if(o.flip)ctx.scale(-1,1);
   if(o.sy)ctx.scale(1,o.sy);
   ctx.drawImage(im,-w*fx,-h,w,h);ctx.restore();
@@ -564,10 +566,11 @@ function spr(key,x,y,h,o={}){ // draw sprite with feet (fx) at x,y and height h
 function sprAnchor(key,ax,ay,h,flip,rot,alpha){ // draw with an anchor point (fractions) placed at ax,ay
   const im=IMG[key];if(!im||!im.naturalWidth)return;
   const w=h*im.naturalWidth/im.naturalHeight,a=SPR[key];
+  if(PX.on){const sp=pxSpr(pxTex(im));sp.anchor.set(a.ax,a.ay);sp.position.set(ax,ay);sp.rotation=rot||0;sp.scale.set((flip?-1:1)*w/im.naturalWidth,h/im.naturalHeight);sp.alpha=alpha??1;return}
   ctx.save();ctx.globalAlpha=alpha??1;ctx.translate(ax,ay);if(rot)ctx.rotate(rot);if(flip)ctx.scale(-1,1);
   ctx.drawImage(im,-w*a.ax,-h*a.ay,w,h);ctx.restore();
 }
-function shadow(x,y,rx,ry,a){ctx.save();const g=ctx.createRadialGradient(x,y,0,x,y,rx);g.addColorStop(0,`rgba(0,0,0,${a})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.translate(x,y);ctx.scale(1,ry/rx);ctx.translate(-x,-y);ctx.beginPath();ctx.arc(x,y,rx,0,6.29);ctx.fill();ctx.restore()}
+function shadow(x,y,rx,ry,a){if(PX.on){const sp=pxSpr(PX.T.shadow);sp.anchor.set(.5);sp.position.set(x,y);sp.scale.set(rx/64,ry/64);sp.alpha=a;return}ctx.save();const g=ctx.createRadialGradient(x,y,0,x,y,rx);g.addColorStop(0,`rgba(0,0,0,${a})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.translate(x,y);ctx.scale(1,ry/rx);ctx.translate(-x,-y);ctx.beginPath();ctx.arc(x,y,rx,0,6.29);ctx.fill();ctx.restore()}
 
 /* ---------------- Keeper ---------------- */
 // Keeper state is computed from the current anim; returns a draw function
@@ -660,6 +663,7 @@ function drawShooter(t){
 
 /* ---------------- Ball ---------------- */
 function drawBall(x,y,r,ang,alpha=1){
+  if(PX.on){pxBall(x,y,r,ang,alpha);return}
   const im=IMG.ball;ctx.save();ctx.globalAlpha=alpha;ctx.translate(x,y);ctx.rotate(ang);
   if(im&&im.naturalWidth)ctx.drawImage(im,-r,-r,r*2,r*2);else{ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,0,r,0,6.29);ctx.fill()}
   ctx.rotate(-ang);const g=ctx.createRadialGradient(-r*.3,-r*.35,r*.2,0,0,r);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(1,'rgba(0,0,10,.16)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,6.29);ctx.fill();
@@ -797,16 +801,18 @@ function fire(t){
     if(a.kind==='barin'){AU.clang();spark(a.tx,a.ty)}
     sub=a.kind==='barin'?'Off the bar and in!':a.corner&&a.high?'Top bins. No chance.':a.kz===a.zone?'He guessed right. Too much power.':a.kz>=0&&L.zones[a.kz].c===L.zones[a.zone].c?'Right side, wrong height.':you?'Sent him the wrong way.':'He sent you the wrong way.';
     S.bulge={x:a.tx,y:a.kind==='barin'?L.gt+L.gh*.55:a.ty,t0:t};AU.swish();S.ledGoal=t;S.zoom=1;
+    pxShock(S.bulge.x,S.bulge.y,'net');if(you||a.decisive)pxShock(a.tx,a.ty,'goal');if(a.kind==='barin')pxShock(a.tx,a.ty,'wood');
     if(you){S.excite=1;AU.roar(1.1,2.6,1000);AU.horn();confetti([TM.youHex,'#ffffff','#c6ff3d']);S.flash=.22;S.shake=RM?0:10}
     else{S.excite=.5;AU.roar(.7,1.9,700)}
   }else if(a.outcome==='save'){
     big='Saved';good=!you;
     sub=a.kz===a.zone?(you?'He read you.':'You read him.'):(you?'Strong hand from the keeper.':'What a stop.');
     const p=ballAt(a,.86);const dir=Math.abs(p.x-L.cx)<L.gw*.05?(Math.random()<.5?-1:1):Math.sign(p.x-L.cx);
-    a.def={x:p.x,y:p.y,r:p.r,vx:dir*L.gw*.9,vy:-L.gh*(a.high?2.4:1.3),t0:t};AU.thump();spark(p.x,p.y);
+    a.def={x:p.x,y:p.y,r:p.r,vx:dir*L.gw*.9,vy:-L.gh*(a.high?2.4:1.3),t0:t};AU.thump();spark(p.x,p.y);pxShock(p.x,p.y,'save');
     if(you){AU.groan();S.excite=.3}else{S.excite=1;AU.roar(1,2.3,950);confetti(['#c6ff3d','#2f6bff','#ffffff']);S.shake=RM?0:7;S.flash=.15}
   }else{
     big=a.kind==='over'?'Over the bar':a.kind==='post'?'Off the post':a.kind==='bar'?'Off the bar':'Wide';good=!you;
+    if(a.kind==='bar'||a.kind==='post')pxShock(a.tx,a.ty,'wood');
     if(a.kind==='bar'){AU.clang();spark(a.tx,a.ty);S.shake=RM?0:6;a.def={x:a.tx,y:a.ty,r:ballAt(a,1).r,vx:(Math.random()<.5?-1:1)*L.gw*rnd(.15,.4),vy:-L.gh*1.7,t0:t}}
     if(a.kind==='post'){AU.clang();spark(a.tx,a.ty);a.def={x:a.tx,y:a.ty,r:ballAt(a,1).r,vx:(a.tx<L.cx?-1:1)*L.gw*.7,vy:-L.gh*.6,t0:t}}
     sub=you?(a.kind==='over'?'Leaned back. Too much on it.':a.kind==='post'?'Inches away.':a.kind==='bar'?'Rattled the woodwork!':'Dragged it wide.'):a.kind==='bar'?'Saved by the crossbar!':'He cracked under pressure.';
@@ -823,7 +829,7 @@ function startReplay(a,t){ // slow-motion action replay of the big moments
 function endReplay(){S.anim=null;$('#replayTag').hidden=true;$('#replaySkip').hidden=true;S.turn++;startTurn()}
 function fireReplay(t){
   const a=S.anim;a.fired=true;a.fireT=t;a.next=t+.8;
-  if(a.outcome==='goal'){S.bulge={x:a.tx,y:a.kind==='barin'?L.gt+L.gh*.55:a.ty,t0:t};AU.swish();if(a.kind==='barin'){AU.clang();spark(a.tx,a.ty)}}
+  if(a.outcome==='goal'){S.bulge={x:a.tx,y:a.kind==='barin'?L.gt+L.gh*.55:a.ty,t0:t};AU.swish();pxShock(S.bulge.x,S.bulge.y,'net');if(a.kind==='barin'){AU.clang();spark(a.tx,a.ty)}}
   else if(a.outcome==='save'){const p=ballAt(a,.86),dir=Math.abs(p.x-L.cx)<L.gw*.05?1:Math.sign(p.x-L.cx);a.def={x:p.x,y:p.y,r:p.r,vx:dir*L.gw*.9,vy:-L.gh*(a.high?2.4:1.3),t0:t};AU.thump();spark(p.x,p.y)}
   else if(a.kind==='bar'||a.kind==='post'){AU.clang();spark(a.tx,a.ty);a.def={x:a.tx,y:a.ty,r:ballAt(a,1).r,vx:(a.tx<L.cx?-1:1)*L.gw*.3,vy:-L.gh*1.4,t0:t}}
 }
@@ -918,6 +924,7 @@ function drawStadium(t){
     const g=ctx.createRadialGradient(x,yy,0,x,yy,r*5);g.addColorStop(0,'rgba(255,255,255,.95)');g.addColorStop(1,'rgba(255,255,255,0)');ctx.fillStyle=g;ctx.fillRect(x-r*5,yy-r*5,r*10,r*10)}
 }
 function drawBulge(t){
+  if(PX.on){pxBulge(t);return}
   const B=S.bulge;if(!B)return;const age=t-B.t0;if(age>1.6)return;
   const R=L.gw*.07*(1+age*1.4),a=Math.max(0,1-age/1.6);
   ctx.save();
@@ -927,6 +934,7 @@ function drawBulge(t){
   ctx.restore();
 }
 function drawZones(t){
+  if(PX.on){pxZones(t);return}
   const ph=S.phase;if(ph!=='aim'&&ph!=='keep'&&ph!=='power')return;
   ctx.save();
   if(ph==='power'){
@@ -940,7 +948,7 @@ function drawZones(t){
   if(keep){ // dive arrows from the keeper to each zone
     const ox=L.cx,oy=L.gb-L.gh*.42;
     L.zones.forEach((Z,i)=>{const hv=S.hover===i,dx=Z.x-ox,dy=Z.y-oy,d=Math.hypot(dx,dy)||1,R=Math.min(Z.rw,Z.rh)*(hv?.3:.2),ex=Z.x-dx/d*(R+4),ey=Z.y-dy/d*(R+4),sx=ox+dx/d*L.gh*.12,sy=oy+dy/d*L.gh*.12;
-      if(d<R*1.6)return;ctx.strokeStyle=`rgba(198,255,61,${hv?1:.6})`;ctx.lineWidth=hv?3.5:2.5;ctx.shadowColor='rgba(0,0,0,.7)';ctx.shadowBlur=4;ctx.setLineDash(hv?[]:[8,6]);ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);
+      if(d<R*1.6)return;ctx.strokeStyle=`rgba(198,255,61,${hv?.9:.3})`;ctx.lineWidth=hv?2.5:1.5;ctx.shadowColor='rgba(0,0,0,.7)';ctx.shadowBlur=4;ctx.setLineDash(hv?[]:[8,6]);ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);
       const an=Math.atan2(dy,dx),hl=hv?11:8;ctx.beginPath();ctx.moveTo(ex,ey);ctx.lineTo(ex-Math.cos(an-.45)*hl,ey-Math.sin(an-.45)*hl);ctx.moveTo(ex,ey);ctx.lineTo(ex-Math.cos(an+.45)*hl,ey-Math.sin(an+.45)*hl);ctx.stroke()});
   }
   L.zones.forEach((Z,i)=>{
@@ -953,11 +961,12 @@ function drawZones(t){
   ctx.restore();
 }
 function drawYou(t){ // bouncing "YOU" marker over the player you control this kick
+  if(PX.on){pxYou(t);return}
   if(S.anim||!['aim','power','keep','wait'].includes(S.phase))return;
   const keep=!youShooting(),bob=Math.sin(t*5)*4;
   const s=clamp(L.gh*.17,16,30);
   if(keep){ // glowing ring at the keeper's feet + label on the grass, clear of the target rings
-    ctx.save();const pr=1+Math.sin(t*5)*.06;ctx.strokeStyle='#c6ff3d';ctx.lineWidth=3;ctx.shadowColor='rgba(198,255,61,.9)';ctx.shadowBlur=14;
+    ctx.save();const pr=1+Math.sin(t*5)*.06;ctx.strokeStyle='rgba(198,255,61,.75)';ctx.lineWidth=2;
     ctx.beginPath();ctx.ellipse(L.cx,L.gb,L.gh*.26*pr,L.gh*.06*pr,0,0,6.29);ctx.stroke();ctx.shadowBlur=0;
     ctx.font=`italic 900 ${s}px "Barlow Condensed",sans-serif`;ctx.textAlign='center';ctx.textBaseline='top';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';
     ctx.strokeText('YOU',L.cx,L.gb+L.gh*.09);ctx.fillStyle='#c6ff3d';ctx.fillText('YOU',L.cx,L.gb+L.gh*.09);ctx.restore();return;
@@ -989,18 +998,7 @@ function draw(t){
   if(S.shake>.3)ctx.translate(rnd(-S.shake,S.shake),rnd(-S.shake,S.shake)*.6);
   drawStadium(t);
 
-  const a=S.anim;
-  let ball={x:L.spot.x,y:L.spot.y,r:L.r0,ang:0,alpha:1,inNet:false,gy:L.spot.y+L.r0*.85,s:1};
-  if(a&&t>=a.kick){
-    const z=(t-a.kick)/a.dur;
-    if(a.outcome==='goal'){
-      if(z<1){const p=ballAt(a,z);ball={...p,ang:z*16,alpha:1,inNet:z>.92}}
-      else{const age=t-a.kick-a.dur,p=ballAt(a,1);const drop=Math.min(age*age*L.gh*2.2,L.gb-L.gh*.06-p.r-a.ty);ball={x:a.tx,y:a.ty+Math.max(0,drop),r:p.r*.9,gy:L.gb,ang:16,alpha:1,inNet:true,s:p.s}}
-    }else if(a.def&&t>=a.def.t0){
-      const d=a.def,age=t-d.t0;ball={x:d.x+d.vx*age,y:d.y+d.vy*age+.5*L.gh*7*age*age,r:d.r,gy:L.gb+L.gh*.15,ang:16+age*20,alpha:clamp(1-age/.9,0,1),inNet:false,s:.3};
-    }else{const zz=Math.min(z,1.7),p=ballAt(a,zz);ball={...p,ang:z*16,alpha:z>1?clamp(1-(z-1)/.6,0,1):1,inNet:false}}
-    if(!a.fired||t-a.fireT<.3){a.trail.push({x:ball.x,y:ball.y,r:ball.r});if(a.trail.length>9)a.trail.shift()}
-  }
+  const a=S.anim,ball=ballState(t);
   // ball shadow
   if(ball.alpha>.05){shadow(ball.x,ball.gy,ball.r*1.3,ball.r*.4,.42*ball.alpha)}
   if(ball.inNet){drawBulge(t);drawBall(ball.x,ball.y,ball.r,ball.ang,ball.alpha)}
@@ -1020,6 +1018,168 @@ function draw(t){
   if(S.ts<.99){const bh=H*.06*(1-S.ts);ctx.fillStyle='#000';ctx.fillRect(0,0,W,bh);ctx.fillRect(0,H-bh,W,bh)}
   if(S.flash>0){ctx.fillStyle=`rgba(255,250,235,${S.flash})`;ctx.fillRect(0,0,W,H)}
 }
+function ballState(t){ // where the ball is this frame (shared by both renderers)
+  const a=S.anim;
+  let ball={x:L.spot.x,y:L.spot.y,r:L.r0,ang:0,alpha:1,inNet:false,gy:L.spot.y+L.r0*.85,s:1};
+  if(a&&t>=a.kick){
+    const z=(t-a.kick)/a.dur;
+    if(a.outcome==='goal'){
+      if(z<1){const p=ballAt(a,z);ball={...p,ang:z*16,alpha:1,inNet:z>.92}}
+      else{const age=t-a.kick-a.dur,p=ballAt(a,1);const drop=Math.min(age*age*L.gh*2.2,L.gb-L.gh*.06-p.r-a.ty);ball={x:a.tx,y:a.ty+Math.max(0,drop),r:p.r*.9,gy:L.gb,ang:16,alpha:1,inNet:true,s:p.s}}
+    }else if(a.def&&t>=a.def.t0){
+      const d=a.def,age=t-d.t0;ball={x:d.x+d.vx*age,y:d.y+d.vy*age+.5*L.gh*7*age*age,r:d.r,gy:L.gb+L.gh*.15,ang:16+age*20,alpha:clamp(1-age/.9,0,1),inNet:false,s:.3};
+    }else{const zz=Math.min(z,1.7),p=ballAt(a,zz);ball={...p,ang:z*16,alpha:z>1?clamp(1-(z-1)/.6,0,1):1,inNet:false}}
+    if(!a.fired||t-a.fireT<.3){a.trail.push({x:ball.x,y:ball.y,r:ball.r});if(a.trail.length>9)a.trail.shift()}
+  }
+  return ball;
+}
+
+/* ---------------- GPU renderer (PixiJS v8 + pixi-filters, served from /vendor) ----------------
+   Runs the same drawing code as the canvas renderer above, but on the graphics chip, and adds:
+   floodlight bloom (baked once), shockwaves on impact, a rippling net, motion blur on the ball and
+   cinematic colour in slow motion. If WebGL or the files are missing, the canvas renderer keeps going.
+   Effects step down by themselves on slow phones (PX.fx 2 -> 1 -> 0). Add ?canvas to the URL to force the old renderer. */
+const PX={ok:false,on:false,fx:2,pool:[],used:0,tex:new Map(),bake:{},shocks:[],slow:0};
+function pxTex(src){let t=PX.tex.get(src);if(!t){t=PIXI.Texture.from(src);PX.tex.set(src,t)}return t}
+function pxCanvas(w,h,fn){const c=document.createElement('canvas');c.width=Math.max(1,Math.ceil(w));c.height=Math.max(1,Math.ceil(h));fn(c.getContext('2d'),c.width,c.height);return c}
+const radial=(stops,n=128)=>pxCanvas(n,n,(g,w)=>{const gr=g.createRadialGradient(w/2,w/2,0,w/2,w/2,w/2);stops.forEach(([o,c])=>gr.addColorStop(o,c));g.fillStyle=gr;g.fillRect(0,0,w,w)});
+const loadScript=src=>new Promise((r,j)=>{const el=document.createElement('script');el.src=src;el.onload=r;el.onerror=j;document.head.appendChild(el)});
+async function initPixi(){
+  if(new URLSearchParams(location.search).has('canvas'))return;
+  try{
+    await loadScript('vendor/pixi.min.js');await loadScript('vendor/pixi-filters.js');
+    const app=new PIXI.Application();
+    await app.init({width:W||innerWidth,height:H||innerHeight,resolution:DPR,autoDensity:true,antialias:true,backgroundColor:0x04070e,autoStart:false,preference:'webgl',powerPreference:'high-performance'});
+    const c=app.canvas;c.setAttribute('aria-hidden','true');c.style.position='absolute';c.style.left='0';c.style.top='0';c.style.pointerEvents='none';cv.after(c);
+    const F=PIXI.filters;PX.app=app;
+    PX.T={shadow:pxTex(radial([[0,'rgba(0,0,0,1)'],[1,'rgba(0,0,0,0)']])),glow:pxTex(radial([[0,'rgba(255,255,255,1)'],[.22,'rgba(255,255,255,.55)'],[1,'rgba(255,255,255,0)']])),
+      dot:pxTex(radial([[0,'rgba(255,255,255,1)'],[.7,'rgba(255,255,255,1)'],[1,'rgba(255,255,255,0)']],32)),white:PIXI.Texture.WHITE};
+    PX.scene=new PIXI.Container();PX.world=new PIXI.Container();PX.overlay=new PIXI.Container();PX.scene.addChild(PX.world);app.stage.addChild(PX.scene,PX.overlay);
+    PX.bg=new PIXI.Sprite();PX.top=new PIXI.Sprite();PX.net=new PIXI.Sprite();PX.ledFlash=new PIXI.Graphics();
+    PX.led=new PIXI.TilingSprite({texture:PIXI.Texture.EMPTY});PX.ledGoal=new PIXI.TilingSprite({texture:PIXI.Texture.EMPTY});PX.scan=new PIXI.TilingSprite({texture:PIXI.Texture.EMPTY});
+    PX.gZ=new PIXI.Graphics();PX.gB=new PIXI.Graphics();PX.gY=new PIXI.Graphics();
+    PX.youTxt=new PIXI.Text({text:'YOU',style:{fontFamily:'Barlow Condensed',fontStyle:'italic',fontWeight:'900',fontSize:20,fill:'#ffffff',stroke:{color:'#000000',width:4,alpha:.6}}});
+    PX.ball=new PIXI.Sprite();PX.ball.anchor.set(.5);
+    PX.vig=new PIXI.Sprite();PX.bars=new PIXI.Graphics();PX.flash=new PIXI.Graphics();PX.overlay.addChild(PX.vig,PX.bars,PX.flash);
+    PX.grade=new PIXI.ColorMatrixFilter();
+    PX.mblur=new F.MotionBlurFilter({velocity:{x:0,y:0},kernelSize:9,offset:0});
+    PX.ShockwaveFilter=F.ShockwaveFilter;PX.Bloom=F.AdvancedBloomFilter;
+    PX.scene.filterArea=app.screen;
+    PX.ok=true;resize();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);
+  }catch(e){console.warn('GPU renderer unavailable, using canvas:',e);PX.ok=false;if(PX.app){try{PX.app.canvas.remove();PX.app.destroy()}catch(_){}}}
+}
+function pxBakeBg(key){ // floodlight glow is baked into the stadium image once, so it costs nothing per frame
+  if(PX.bake[key])return PX.bake[key];const im=IMG[key];if(!im||!im.naturalWidth)return null;
+  const base=pxTex(im);if(PX.fx<1)return PX.bake[key]=base;
+  try{const rt=PIXI.RenderTexture.create({width:base.width,height:base.height}),sp=new PIXI.Sprite(base);
+    sp.filters=[new PX.Bloom({threshold:.62,bloomScale:.9,brightness:1,blur:7,quality:5})];PX.app.renderer.render({container:sp,target:rt,clear:true});return PX.bake[key]=rt}
+  catch(e){return PX.bake[key]=base}
+}
+function pxLayout(){
+  if(!PX.ok||!L)return;PX.app.renderer.resize(W,H);
+  const bt=pxBakeBg(L.key);if(bt){PX.bg.texture=bt;PX.bg.position.set(L.ox,L.oy);PX.bg.width=L.dw;PX.bg.height=L.dh}
+  if(L.oy>0){const hh=L.oy+L.dh*.08;PX.top.texture=pxTex(pxCanvas(4,64,(g,w,h)=>{const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'#04070e');gr.addColorStop(L.oy/hh,'rgba(4,7,14,.85)');gr.addColorStop(1,'rgba(4,7,14,0)');g.fillStyle=gr;g.fillRect(0,0,w,h)}));PX.top.position.set(0,0);PX.top.width=W;PX.top.height=hh;PX.top.visible=true}else PX.top.visible=false;
+  // LED boards: text rendered once per size, scrolled on the GPU
+  const h=L.bb-L.bt,fs=h*.72,font=`900 ${fs*DPR}px "Big Shoulders Display", Impact, sans-serif`,mk=(msg,fill,glow)=>{
+    const m=document.createElement('canvas').getContext('2d');m.font=font;const w=Math.ceil(m.measureText(msg).width)||400;
+    return pxCanvas(w,h*DPR,(g,cw,ch)=>{g.font=font;g.textBaseline='middle';g.fillStyle=fill;if(glow){g.shadowColor='rgba(255,200,140,.8)';g.shadowBlur=6*DPR}g.fillText(msg,0,ch/2+DPR)})};
+  for(const [ts,msg,fill,glow] of [[PX.led,'TWELVE YARDS   ●   READ YOUR RIVAL   ●   NERVE WINS   ●   ','rgba(255,248,236,.95)',1],[PX.ledGoal,'GOAL  ●  GOAL  ●  GOAL  ●  ','#1a0700',0]]){
+    const cnv=mk(msg,fill,glow);if(ts.texture&&ts.texture!==PIXI.Texture.EMPTY)ts.texture.destroy(true);ts.texture=PIXI.Texture.from(cnv);ts.tileScale.set(1/DPR);ts.width=W;ts.height=h;ts.position.set(0,L.bt);ts.cycle=cnv.width/DPR}
+  PX.scan.texture=pxTex(PX.scanC||(PX.scanC=pxCanvas(4,3,(g)=>{g.fillStyle='rgba(0,0,0,.18)';g.fillRect(0,0,4,1)})));PX.scan.width=W;PX.scan.height=h;PX.scan.position.set(0,L.bt);
+  const N=NET[L.key];if(N){PX.net.texture=pxTex(N.c);PX.net.position.set(L.ox+N.x0*L.s,L.oy+N.y0*L.s);PX.net.scale.set(L.s);PX.net.visible=true}else PX.net.visible=false;
+  // vignette (screen space)
+  const vw=Math.ceil(W/4),vh=Math.ceil(H/4);PX.vig.texture=PIXI.Texture.from(pxCanvas(vw,vh,(g,w,hh)=>{const v=g.createRadialGradient(w/2,hh*.48,Math.min(w,hh)*.35,w/2,hh*.48,Math.max(w,hh)*.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.5)');g.fillStyle=v;g.fillRect(0,0,w,hh)}));PX.vig.width=W;PX.vig.height=H;
+}
+function pxSpr(tex){let sp=PX.pool[PX.used++];if(!sp){sp=new PIXI.Sprite();PX.pool.push(sp)}sp.texture=tex;sp.visible=true;sp.alpha=1;sp.rotation=0;sp.tint=0xffffff;sp.blendMode='normal';sp.anchor.set(0);sp.scale.set(1);PX.world.addChild(sp);return sp}
+function pxAdd(o){PX.world.addChild(o);return o}
+function pxBall(x,y,r,ang,alpha){
+  const b=pxAdd(PX.ball);b.texture=pxTex(IMG.ball);b.position.set(x,y);b.rotation=ang;b.scale.set(2*r/(IMG.ball.naturalWidth||256));b.alpha=alpha;
+  const lb=PX.lastBall,dx=lb?x-lb.x:0,dy=lb?y-lb.y:0;PX.lastBall={x,y};
+  if(PX.fx>=2&&!RM&&Math.hypot(dx,dy)>3){PX.mblur.velocity={x:clamp(dx*1.2,-40,40),y:clamp(dy*1.2,-40,40)};b.filters=[PX.mblur]}else b.filters=null;
+}
+function pxShock(x,y,kind){ // kind: goal | save | wood | net
+  if(RM||PX.fx<1||!PX.ok)return;if(kind==='net'&&PX.fx<2)return;
+  const k={goal:{amplitude:14,wavelength:160,speed:950,radius:Math.max(W,H)*.55,brightness:1.06},save:{amplitude:10,wavelength:110,speed:800,radius:Math.max(W,H)*.35,brightness:1.04},
+    wood:{amplitude:7,wavelength:70,speed:700,radius:Math.max(W,H)*.25,brightness:1.08},net:{amplitude:5,wavelength:26,speed:260,radius:L.gw*.3,brightness:1}}[kind];
+  const f=new PX.ShockwaveFilter({center:{x:0,y:0},time:0,...k});PX.shocks.push({f,x,y,t0:real(),life:k.radius/k.speed+.15});
+}
+function pxStadium(t){
+  pxAdd(PX.bg);if(PX.top.visible)pxAdd(PX.top);
+  const goalOn=t-S.ledGoal<2.4&&S.ledGoal>0,h=L.bb-L.bt;
+  PX.ledFlash.clear();if(goalOn&&Math.sin(t*18)>0)PX.ledFlash.rect(0,L.bt,W,h).fill({color:0xffffff,alpha:.35});pxAdd(PX.ledFlash);
+  const on=goalOn?PX.ledGoal:PX.led;PX.led.visible=!goalOn;PX.ledGoal.visible=goalOn;on.tilePosition.x=-((t*(goalOn?160:45))%(on.cycle||400));pxAdd(on);
+  pxAdd(PX.scan);if(PX.net.visible)pxAdd(PX.net);
+  const n=RM?0:Math.floor(1+S.excite*10); // crowd camera flashes
+  for(let i=0;i<n;i++){if(Math.random()>.35)continue;const r=rnd(1.5,4),sp=pxSpr(PX.T.glow);sp.anchor.set(.5);sp.blendMode='add';sp.position.set(Math.random()*W,rnd(Math.max(0,L.oy),L.bt-4));sp.scale.set(r*10/128);sp.alpha=.95}
+}
+function pxBulge(t){
+  const B=S.bulge,g=PX.gB;g.clear();if(!B)return;const age=t-B.t0;if(age>1.6)return;
+  const R=L.gw*.07*(1+age*1.4),a=Math.max(0,1-age/1.6),sp=pxSpr(PX.T.shadow);sp.anchor.set(.5);sp.position.set(B.x,B.y);sp.scale.set(R/64);sp.alpha=.45*a;
+  g.ellipse(B.x,B.y,R*.9,R*.7).stroke({width:2,color:0xffffff,alpha:.6*a});pxAdd(g);
+}
+function pxDash(g,x1,y1,x2,y2,on,off,st){const d=Math.hypot(x2-x1,y2-y1),ux=(x2-x1)/d,uy=(y2-y1)/d;for(let p=0;p<d;p+=on+off){const q=Math.min(d,p+on);g.moveTo(x1+ux*p,y1+uy*p).lineTo(x1+ux*q,y1+uy*q)}g.stroke(st)}
+function pxZones(t){
+  const g=PX.gZ;g.clear();pxAdd(g);const ph=S.phase;if(ph!=='aim'&&ph!=='keep'&&ph!=='power')return;
+  if(ph==='power'){const Z=L.zones[S.aim],pulse=1+Math.sin(t*8)*.08,R=Math.min(Z.rw,Z.rh)*.34*pulse,o=0xff7a1a;
+    g.circle(Z.x,Z.y,R).stroke({width:6,color:o,alpha:.12});g.circle(Z.x,Z.y,R).stroke({width:3,color:o});g.circle(Z.x,Z.y,R*.32).stroke({width:3,color:o});
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])g.moveTo(Z.x+dx*R*.6,Z.y+dy*R*.6).lineTo(Z.x+dx*R*1.35,Z.y+dy*R*1.35);g.stroke({width:3,color:o});return}
+  const keep=ph==='keep',col=keep?0xc6ff3d:0xffffff,hot=keep?0xc6ff3d:0xff7a1a;
+  if(keep){const ox=L.cx,oy=L.gb-L.gh*.42;
+    L.zones.forEach((Z,i)=>{const hv=S.hover===i,dx=Z.x-ox,dy=Z.y-oy,d=Math.hypot(dx,dy)||1,R=Math.min(Z.rw,Z.rh)*(hv?.3:.2);if(d<R*1.6)return;
+      const ex=Z.x-dx/d*(R+4),ey=Z.y-dy/d*(R+4),sx=ox+dx/d*L.gh*.12,sy=oy+dy/d*L.gh*.12,st={width:hv?2.5:1.5,color:0xc6ff3d,alpha:hv?.9:.3};
+      if(hv)g.moveTo(sx,sy).lineTo(ex,ey).stroke(st);else pxDash(g,sx,sy,ex,ey,8,6,st);
+      const an=Math.atan2(dy,dx),hl=hv?11:8;g.moveTo(ex-Math.cos(an-.45)*hl,ey-Math.sin(an-.45)*hl).lineTo(ex,ey).lineTo(ex-Math.cos(an+.45)*hl,ey-Math.sin(an+.45)*hl).stroke(st)})}
+  L.zones.forEach((Z,i)=>{const hv=S.hover===i,R=Math.min(Z.rw,Z.rh)*(hv?.3:.2);
+    g.circle(Z.x,Z.y,R+2).stroke({width:hv?6:4,color:0x000000,alpha:.25});
+    g.circle(Z.x,Z.y,R).fill({color:hv?hot:col,alpha:hv?.25:.08}).stroke({width:hv?3:2,color:hv?hot:col,alpha:hv?1:.55})});
+}
+function pxYou(t){
+  const g=PX.gY,tx=PX.youTxt;g.clear();tx.visible=false;pxAdd(g);pxAdd(tx);
+  if(S.anim||!['aim','power','keep','wait'].includes(S.phase))return;
+  const keep=!youShooting(),bob=Math.sin(t*5)*4,s=clamp(L.gh*.17,16,30);
+  if(tx.style.fontSize!==s)tx.style.fontSize=s;tx.visible=true;
+  if(keep){const pr=1+Math.sin(t*5)*.06;g.ellipse(L.cx,L.gb,L.gh*.26*pr,L.gh*.06*pr).stroke({width:2,color:0xc6ff3d,alpha:.75});
+    tx.style.fill='#c6ff3d';tx.anchor.set(.5,0);tx.position.set(L.cx,L.gb+L.gh*.09);return}
+  const x=L.sx0,y=L.sy0-L.sh*1.06+bob,c=parseInt(TM.youHex.slice(1),16);
+  g.moveTo(x-s*.55,y-s*.5).lineTo(x+s*.55,y-s*.5).lineTo(x,y+s*.15).closePath().fill({color:c}).stroke({width:2,color:0x000000,alpha:.55});
+  tx.style.fill='#ffffff';tx.anchor.set(.5,1);tx.position.set(x,y-s*.6);
+}
+function pxDraw(t){
+  if(!L)return;PX.used=0;PX.on=true;const Wd=PX.world;
+  const Cm=S.cam,cz=Cm.z*(1+easeOut(S.zoom)*.05);let dx=0,dy=0;if(!RM){dx=Math.sin(t*.37)*2;dy=Math.sin(t*.29)*1.5}if(S.shake>.3){dx+=rnd(-S.shake,S.shake);dy+=rnd(-S.shake,S.shake)*.6}
+  Wd.pivot.set(Cm.x,Cm.y);Wd.position.set(W/2+dx,H/2+dy);Wd.scale.set(cz);
+  pxStadium(t);
+  const a=S.anim,ball=ballState(t);
+  if(ball.alpha>.05)shadow(ball.x,ball.gy,ball.r*1.3,ball.r*.4,.42*ball.alpha);
+  PX.gB.clear();if(ball.inNet){pxBulge(t);drawBall(ball.x,ball.y,ball.r,ball.ang,ball.alpha)}
+  drawKeeper(t);
+  pxZones(t);
+  if(!ball.inNet&&ball.alpha>0){
+    if(a&&a.trail.length>1&&!RM)for(let i=0;i<a.trail.length-1;i++){const p=a.trail[i],k=i/a.trail.length,sp=pxSpr(PX.T.dot);sp.anchor.set(.5);sp.position.set(p.x,p.y);sp.scale.set(p.r*(.5+k*.5)/16);sp.alpha=.14*k*ball.alpha}
+    drawBall(ball.x,ball.y,ball.r,ball.ang,ball.alpha);
+  }else PX.lastBall=null;
+  drawShooter(t);
+  pxYou(t);
+  for(const p of S.sparks){const sp=pxSpr(PX.T.dot);sp.anchor.set(.5);sp.blendMode='add';sp.tint=0xfff0c8;sp.position.set(p.x,p.y);sp.scale.set(5/32);sp.alpha=clamp(p.life*2,0,1)}
+  for(const p of S.particles){const sp=pxSpr(PX.T.white);sp.anchor.set(.5);sp.tint=p.c;sp.position.set(p.x,p.y);sp.rotation=p.rot;sp.width=p.w;sp.height=p.h;sp.alpha=clamp(p.life,0,1)}
+  for(let i=PX.used;i<PX.pool.length;i++)PX.pool[i].visible=false;
+  // screen-space overlay: vignette, slow-mo bars, flash
+  PX.bars.clear();if(S.ts<.99){const bh=H*.06*(1-S.ts);PX.bars.rect(0,0,W,bh).rect(0,H-bh,W,bh).fill({color:0x000000})}
+  PX.flash.clear();if(S.flash>0)PX.flash.rect(0,0,W,H).fill({color:0xfffaeb,alpha:S.flash});
+  // post effects
+  const fl=[],slow=clamp((1-S.ts)/.6,0,1);
+  if(!RM&&(PX.fx>=2||slow>.02)){ // grading: a touch of punch normally, cooler and moodier in slow motion
+    if(Math.abs(slow-PX.slow)>.01||!PX.gradeSet){PX.slow=slow;PX.gradeSet=1;const g=PX.grade;g.contrast(.1+.18*slow,false);g.saturate(.12-.45*slow,true);if(slow>.02)g.brightness(1-.06*slow,true)}
+    fl.push(PX.grade)}
+  const now=real();PX.shocks=PX.shocks.filter(sh=>now-sh.t0<sh.life);
+  for(const sh of PX.shocks){sh.f.time=now-sh.t0;sh.f.center={x:(sh.x-Cm.x)*cz+W/2+dx,y:(sh.y-Cm.y)*cz+H/2+dy};fl.push(sh.f)}
+  PX.scene.filters=fl.length?fl:null;
+  PX.app.renderer.render(PX.app.stage);PX.on=false;
+}
+// steps effects down when a phone can't keep up (only measured while the page is visible)
+const PERF={n:0,sum:0};
+function pxPerf(dt){if(!PX.ok||document.visibilityState!=='visible')return;PERF.sum+=dt;PERF.n++;if(PERF.n<90)return;const avg=PERF.sum/PERF.n;PERF.n=PERF.sum=0;
+  if(avg>.034&&PX.fx>0){PX.fx--;if(PX.fx===0){PX.app.renderer.resolution=1;DPR=1;resize()}console.info('effects level',PX.fx)}}
 
 /* ---------------- Loop ---------------- */
 let last=real();
@@ -1060,7 +1220,8 @@ function update(){
   S.sparks=S.sparks.filter(p=>p.life>0);
   return t;
 }
-function loop(){const t=update();draw(t);requestAnimationFrame(loop)}
+let lastF=real();
+function loop(){const t=update(),n=real();pxPerf(n-lastF);lastF=n;(PX.ok?pxDraw:draw)(t);requestAnimationFrame(loop)}
 
 /* ---------------- Input ---------------- */
 function zoneAt(e){
@@ -1187,6 +1348,8 @@ $('#lobbyBack').addEventListener('click',()=>{leaveOnline();S.mode='bot';$('#lob
 }}
 window.addEventListener('resize',resize);
 resize();renderBoard();requestAnimationFrame(loop);
+if(document.readyState==='complete')initPixi();else addEventListener('load',initPixi);
+window.TY={S,PX,ON,TM}; // handy for debugging from the browser console
 })();
 </script>
 </body>
