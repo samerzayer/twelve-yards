@@ -435,7 +435,7 @@ function kitPose(hex,pose){ // the striker in a team colour: blue kit repainted 
     for(let ch=0;ch<3;ch++)p[i+ch]=p[i+ch]*r0+kc[ch]*a2+nc[ch]*a1}
   g.putImageData(d,0,0);return KITS[key]=c;
 }
-function warmKits(hexes){let i=0;const jobs=[];hexes.forEach(h=>POSES.forEach(po=>jobs.push([h,po])));const go=()=>{if(i>=jobs.length)return;kitPose(...jobs[i++]);setTimeout(go,16)};go()} // a pose at a time, so nothing stutters
+function warmKits(hexes){let i=0;const jobs=[];hexes.forEach(h=>POSES.forEach(po=>jobs.push([h,po])));const go=()=>{if(i>=jobs.length){if(PX.ok)pxWarm();return}kitPose(...jobs[i++]);setTimeout(go,16)};go()} // a pose at a time, so nothing stutters
 const ink=hex=>lum(hex)>.6?'#070c1a':'#ffffff';
 const TM={you:store('ty_team')||'BHR',rival:'BRA',youHex:'#d01c2a',rivHex:'#f6d200'};
 function applyTeams(){ // pick colours (no clashes), repaint kits, recolour the HUD
@@ -546,7 +546,7 @@ $('#mute').addEventListener('click',()=>{S.mute=!S.mute;store('ty_mute',S.mute);
 
 /* ---------------- Layout ---------------- */
 function resize(){
-  const r=cv.getBoundingClientRect();DPR=PX.fx===0?1:Math.min(2,window.devicePixelRatio||1);W=r.width;H=r.height;
+  const r=cv.getBoundingClientRect();W=r.width;H=r.height;DPR=Math.min(W*H<=520000?3:2,window.devicePixelRatio||1); // phones render at their full sharpness
   if(PX.ok){cv.width=cv.height=1}else{cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR)} // with the GPU renderer, #cv only catches taps
   layout();placeHud();if(PX.ok)pxLayout();
 }
@@ -578,7 +578,7 @@ function placeHud(){
 function spr(key,x,y,h,o={}){ // draw sprite with feet (fx) at x,y and height h
   const im=o.im||IMG[key],iw=im&&(im.naturalWidth||im.width),ih=im&&(im.naturalHeight||im.height);if(!iw)return;
   const w=h*iw/ih,fx=(SPR[key].fx??.5);
-  if(PX.on){const sp=pxSpr(pxTex(im));sp.anchor.set(fx,1);sp.position.set(x,y);sp.rotation=o.rot||0;sp.scale.set((o.flip?-1:1)*w/iw,(o.sy||1)*h/ih);sp.alpha=o.alpha??1;return}
+  if(PX.on){const tx=pxSharp(im,h)||pxTex(im),sp=pxSpr(tx);sp.anchor.set(fx,1);sp.position.set(x,y);sp.rotation=o.rot||0;sp.scale.set((o.flip?-1:1)*w/tx.width,(o.sy||1)*h/tx.height);sp.alpha=o.alpha??1;return}
   ctx.save();ctx.globalAlpha=o.alpha??1;ctx.translate(x,y);if(o.rot)ctx.rotate(o.rot);if(o.flip)ctx.scale(-1,1);
   if(o.sy)ctx.scale(1,o.sy);
   ctx.drawImage(im,-w*fx,-h,w,h);ctx.restore();
@@ -586,7 +586,7 @@ function spr(key,x,y,h,o={}){ // draw sprite with feet (fx) at x,y and height h
 function sprAnchor(key,ax,ay,h,flip,rot,alpha){ // draw with an anchor point (fractions) placed at ax,ay
   const im=IMG[key];if(!im||!im.naturalWidth)return;
   const w=h*im.naturalWidth/im.naturalHeight,a=SPR[key];
-  if(PX.on){const sp=pxSpr(pxTex(im));sp.anchor.set(a.ax,a.ay);sp.position.set(ax,ay);sp.rotation=rot||0;sp.scale.set((flip?-1:1)*w/im.naturalWidth,h/im.naturalHeight);sp.alpha=alpha??1;return}
+  if(PX.on){const tx=pxSharp(im,h)||pxTex(im),sp=pxSpr(tx);sp.anchor.set(a.ax,a.ay);sp.position.set(ax,ay);sp.rotation=rot||0;sp.scale.set((flip?-1:1)*w/tx.width,h/tx.height);sp.alpha=alpha??1;return}
   ctx.save();ctx.globalAlpha=alpha??1;ctx.translate(ax,ay);if(rot)ctx.rotate(rot);if(flip)ctx.scale(-1,1);
   ctx.drawImage(im,-w*a.ax,-h*a.ay,w,h);ctx.restore();
 }
@@ -595,7 +595,7 @@ function shadow(x,y,rx,ry,a){if(PX.on){const sp=pxSpr(PX.T.shadow);sp.anchor.set
 /* ---------------- Keeper ---------------- */
 // Keeper state is computed from the current anim; returns a draw function
 function drawKeeper(t){
-  const a=S.anim,gh=L.gh,KH=gh*.64,kh=k=>KH*SPR[k].hr;
+  const a=S.anim,gh=L.gh,KH=keeperH(),kh=k=>KH*SPR[k].hr;
   const tense=a&&!a.fired&&t>a.t0?1:0;
   const sway=Math.sin(t*2.2)*L.gw*.012+tense*Math.sin(t*7.5)*L.gw*.01,hop=Math.abs(Math.sin(t*(4.4+tense*3)))*gh*(.012+tense*.01);
   const pose=(k,x,lift=0,alpha=1)=>{if(alpha<=0)return;shadow(x,L.gb,gh*.23,gh*.045,.45*alpha);spr(k,x,L.gb-lift,kh(k),{alpha})};
@@ -605,7 +605,7 @@ function drawKeeper(t){
     else if(a.fired&&a.outcome==='goal')pose('k_sad',x,0,alpha);else pose('k_idle',x,0,alpha);
   };
   if(!a||a.kz===undefined||t<a.kick-.1){
-    if(a&&t>a.kick-.45){const u=clamp((t-(a.kick-.45))/.12,0,1),x=L.cx+sway*(1-u);pose('k_idle',x,hop*(1-u),1-u);pose('k_set',x,0,u);return} // drops into his set position
+    if(a&&t>a.kick-.4){pose('k_set',L.cx);return} // drops into his set position
     pose('k_idle',L.cx+sway,hop);return;
   }
   const z=a.kz,tt=t-(a.kick-.1),p=clamp(tt/.46,0,1);
@@ -615,7 +615,7 @@ function drawKeeper(t){
     if(p<.12){pose('k_set',L.cx);return}
     const k=Z.r===0?'k_jump':'k_crouch',dur=Z.r===0?.9:.95;
     if(tt<dur){const up=Z.r===0?Math.sin(Math.PI*clamp(tt/.9,0,1)):0;shadow(L.cx,L.gb,gh*.22,gh*.045,.42*(1-up*.5));spr(k,L.cx,L.gb-up*gh*.14,kh(k));return}
-    const r=clamp((tt-dur)/.22,0,1);if(r<1)spr(k,L.cx,L.gb,kh(k),{alpha:1-r});react(L.cx,r);return;
+    react(L.cx);return;
   }
   const flip=Z.c===0,high=Z.r===0,key=high?'k_dive_high':'k_dive_low',A=SPR[key],h=kh(key);
   const im=IMG[key],w=im&&im.naturalWidth?h*im.naturalWidth/im.naturalHeight:h*2;
@@ -630,13 +630,9 @@ function drawKeeper(t){
   const bodyX=ax+(flip?1:-1)*w*(A.ax-A.bx);
   const GET=1.05,UP=.35;
   if(tt>GET){ // gets up where he landed and reacts
-    const r=clamp((tt-GET)/UP,0,1);
-    if(r<1){shadow(bodyX,L.gb,w*.5*(1-r),gh*.05,.4*(1-r));sprAnchor(key,ax,ay,h,flip,rot,1-r)}
-    react(clamp(bodyX,L.gl+L.gw*.12,L.gr-L.gw*.12),easeOut(r));return;
+    react(clamp(bodyX,L.gl+L.gw*.12,L.gr-L.gw*.12));return;
   }
   shadow(bodyX,L.gb,w*.5,gh*.05,.35+.2*(after>0?1:q));
-  if(!RM&&q<.95&&q>.05){for(let i=1;i<=3;i++){const qq=Math.max(0,q-i*.1);const gx=lerp(sx,tx,qq),gy=lerp(sy,ty,qq)-Math.sin(Math.PI*qq)*gh*(high?.12:.04);
-    sprAnchor(key,gx,gy,h,flip,lerp((flip?1:-1)*(high?.9:1.1),0,qq),.14/i)}}
   sprAnchor(key,ax,ay,h,flip,rot,1);
 }
 
@@ -654,7 +650,7 @@ function drawShooter(t){
     // stand -> jog -> plant -> strike -> follow-through -> celebrate or despair
     const seq=[[-1,'stand'],[T0+.06,'run1'],[lerp(T0,T1,.6),'run2'],[a.kick-.06,'kick'],[a.kick+.12,'follow']];
     if(a.fired)seq.push([a.fireT+.3,a.outcome==='goal'?'cele':'sad']);
-    frames=blendFrames(seq,t,.07);
+    frames=blendFrames(seq,t,0);
     if(run>0&&run<1)bob=Math.abs(Math.sin(run*Math.PI*2))*h*.012;
     if(a.fired&&a.outcome==='goal'&&t>a.fireT+.3)bob=Math.abs(Math.sin((t-a.fireT)*5))*h*.03;
   }
@@ -1050,12 +1046,38 @@ function ballState(t){ // where the ball is this frame (shared by both renderers
    floodlight bloom (baked once), shockwaves on impact, a rippling net, motion blur on the ball and
    cinematic colour in slow motion. If WebGL or the files are missing, the canvas renderer keeps going.
    Effects step down by themselves on slow phones (PX.fx 2 -> 1 -> 0). Add ?canvas to the URL to force the old renderer. */
-const PX={ok:false,on:false,fx:2,pool:[],used:0,tex:new Map(),bake:{},shocks:[],slow:0};
+const PX={ok:false,on:false,fx:2,pool:[],used:0,tex:new Map(),sharp:new Map(),bake:{},bakeKey:{},shocks:[],slow:0};
 const mips=(w,h)=>Math.floor(Math.log2(Math.max(w,h,1)))+1;
 function pxTex(src){ // textures with mipmaps, so big art shrinks smoothly instead of looking jagged
   let t=PX.tex.get(src);if(t)return t;const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,Src=src instanceof HTMLCanvasElement?PIXI.CanvasSource:PIXI.ImageSource;
   t=new PIXI.Texture({source:new Src({resource:src,autoGenerateMipmaps:true,mipLevelCount:mips(w,h),maxAnisotropy:4,scaleMode:'linear'})});PX.tex.set(src,t);return t}
 function pxCanvas(w,h,fn){const c=document.createElement('canvas');c.width=Math.max(1,Math.ceil(w));c.height=Math.max(1,Math.ceil(h));fn(c.getContext('2d'),c.width,c.height);return c}
+function shrinkCanvas(src,tw,th){ // high-quality downscale in halving steps (sharper than GPU mipmaps)
+  let cur=src,cw=src.naturalWidth||src.width,ch=src.naturalHeight||src.height;
+  while(cw/2>=tw&&ch/2>=th){const nw=Math.round(cw/2),nh=Math.round(ch/2),c=document.createElement('canvas');c.width=nw;c.height=nh;const g=c.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(cur,0,0,nw,nh);cur=c;cw=nw;ch=nh}
+  const c=document.createElement('canvas');c.width=tw;c.height=th;const g=c.getContext('2d',{willReadFrequently:true});g.imageSmoothingQuality='high';g.drawImage(cur,0,0,tw,th);return c;
+}
+function sharpen(c,amt){ // light unsharp mask on solid pixels only (no halos at the edges)
+  const g=c.getContext('2d',{willReadFrequently:true}),d=g.getImageData(0,0,c.width,c.height),p=d.data,o=new Uint8ClampedArray(p),w=c.width,h=c.height;
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){const i=(y*w+x)*4,up=i-w*4,dn=i+w*4;if(o[i+3]<250||o[up+3]<250||o[dn+3]<250||o[i-1]<250||o[i+7]<250)continue;
+    for(let k=0;k<3;k++)p[i+k]=o[i+k]*(1+4*amt)-amt*(o[up+k]+o[dn+k]+o[i-4+k]+o[i+4+k])}
+  g.putImageData(d,0,0);return c;
+}
+function pxSharp(src,h,sharp=true){ // art pre-shrunk to the exact on-screen size, cached per size
+  const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;if(!ih)return null;
+  const th=Math.min(ih,Math.ceil(h*DPR*1.08/8)*8);if(th>=ih*.92)return pxTex(src);
+  let m=PX.sharp.get(src);if(!m){m=new Map();PX.sharp.set(src,m)}let t=m.get(th);if(t)return t;
+  const c=shrinkCanvas(src,Math.max(1,Math.round(iw*th/ih)),th);if(sharp)sharpen(c,.2);
+  t=new PIXI.Texture({source:new PIXI.CanvasSource({resource:c,scaleMode:'linear'})});m.set(th,t);
+  if(m.size>3){const k=m.keys().next().value;m.get(k).destroy(true);m.delete(k)}return t;
+}
+const keeperH=()=>L.gh*.64;
+function pxWarm(){ // shrink every pose ahead of time, a few per frame, so the first kick doesn't stutter
+  if(!PX.ok||!L)return;const jobs=[];
+  for(const hex of[TM.youHex,TM.rivHex])for(const po of POSES)jobs.push(()=>{const im=kitPose(hex,po);if(im)pxSharp(im,L.sh*SPR['p_'+po].hr)});
+  for(const k of Object.keys(SPR))if(k[0]==='k')jobs.push(()=>{if(IMG[k].naturalWidth)pxSharp(IMG[k],keeperH()*SPR[k].hr)});
+  clearTimeout(PX.warmT);let i=0;const go=()=>{for(let n=0;n<2&&i<jobs.length;n++)jobs[i++]();if(i<jobs.length)PX.warmT=setTimeout(go,16)};go();
+}
 const radial=(stops,n=128)=>pxCanvas(n,n,(g,w)=>{const gr=g.createRadialGradient(w/2,w/2,0,w/2,w/2,w/2);stops.forEach(([o,c])=>gr.addColorStop(o,c));g.fillStyle=gr;g.fillRect(0,0,w,w)});
 const loadScript=src=>new Promise((r,j)=>{const el=document.createElement('script');el.src=src;el.onload=r;el.onerror=j;document.head.appendChild(el)});
 async function initPixi(){
@@ -1082,15 +1104,19 @@ async function initPixi(){
     PX.ok=true;resize();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);
   }catch(e){console.warn('GPU renderer unavailable, using canvas:',e);PX.ok=false;if(PX.app){try{PX.app.canvas.remove();PX.app.destroy()}catch(_){}}}
 }
-function pxBakeBg(key){ // floodlight glow is baked into the stadium image once, so it costs nothing per frame
-  if(PX.bake[key])return PX.bake[key];const im=IMG[key];if(!im||!im.naturalWidth)return null;
-  const base=pxTex(im);if(PX.fx<1)return PX.bake[key]=base;
-  try{const rt=PIXI.RenderTexture.create({width:base.width,height:base.height,autoGenerateMipmaps:true,mipLevelCount:mips(base.width,base.height)}),sp=new PIXI.Sprite(base);
-    sp.filters=[new PX.Bloom({threshold:.62,bloomScale:.9,brightness:1,blur:7,quality:5})];PX.app.renderer.render({container:sp,target:rt,clear:true});rt.source.updateMipmaps();return PX.bake[key]=rt}
-  catch(e){return PX.bake[key]=base}
+function pxBakeBg(key){ // stadium shrunk to its exact display size, floodlight glow baked in once
+  const im=IMG[key];if(!im||!im.naturalWidth)return null;
+  const tw=Math.min(im.naturalWidth,Math.round(L.dw*DPR*1.08)),th=Math.round(tw*im.naturalHeight/im.naturalWidth),ck=key+tw;
+  if(PX.bake[ck])return PX.bake[ck];
+  const old=PX.bake[PX.bakeKey[key]];PX.bakeKey[key]=ck;
+  const base=new PIXI.Texture({source:new PIXI.CanvasSource({resource:shrinkCanvas(im,tw,th)})});let out=base;
+  if(PX.fx>=1)try{const rt=PIXI.RenderTexture.create({width:tw,height:th}),sp=new PIXI.Sprite(base);
+    sp.filters=[new PX.Bloom({threshold:.62,bloomScale:.9,brightness:1,blur:2+5*tw/2688,quality:5})];PX.app.renderer.render({container:sp,target:rt,clear:true});base.destroy(true);out=rt}catch(e){}
+  if(old&&old!==out)setTimeout(()=>{try{old.destroy(true)}catch(e){}},500);
+  return PX.bake[ck]=out;
 }
 function pxLayout(){
-  if(!PX.ok||!L)return;PX.app.renderer.resize(W,H);
+  if(!PX.ok||!L)return;PX.app.renderer.resize(W,H,DPR);
   const bt=pxBakeBg(L.key);if(bt){PX.bg.texture=bt;PX.bg.position.set(L.ox,L.oy);PX.bg.width=L.dw;PX.bg.height=L.dh}
   if(L.oy>0){const hh=L.oy+L.dh*.08;PX.top.texture=pxTex(pxCanvas(4,64,(g,w,h)=>{const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'#04070e');gr.addColorStop(L.oy/hh,'rgba(4,7,14,.85)');gr.addColorStop(1,'rgba(4,7,14,0)');g.fillStyle=gr;g.fillRect(0,0,w,h)}));PX.top.position.set(0,0);PX.top.width=W;PX.top.height=hh;PX.top.visible=true}else PX.top.visible=false;
   // LED boards: text rendered once per size, scrolled on the GPU
@@ -1100,9 +1126,10 @@ function pxLayout(){
   for(const [ts,msg,fill,glow] of [[PX.led,'TWELVE YARDS   ●   READ YOUR RIVAL   ●   NERVE WINS   ●   ','rgba(255,248,236,.95)',1],[PX.ledGoal,'GOAL  ●  GOAL  ●  GOAL  ●  ','#1a0700',0]]){
     const cnv=mk(msg,fill,glow);if(ts.texture&&ts.texture!==PIXI.Texture.EMPTY)ts.texture.destroy(true);ts.texture=PIXI.Texture.from(cnv);ts.tileScale.set(1/DPR);ts.width=W;ts.height=h;ts.position.set(0,L.bt);ts.cycle=cnv.width/DPR}
   PX.scan.texture=pxTex(PX.scanC||(PX.scanC=pxCanvas(4,3,(g)=>{g.fillStyle='rgba(0,0,0,.18)';g.fillRect(0,0,4,1)})));PX.scan.width=W;PX.scan.height=h;PX.scan.position.set(0,L.bt);
-  const N=NET[L.key];if(N){PX.net.texture=pxTex(N.c);PX.net.position.set(L.ox+N.x0*L.s,L.oy+N.y0*L.s);PX.net.scale.set(L.s);PX.net.visible=true}else PX.net.visible=false;
+  const N=NET[L.key];if(N){PX.net.texture=pxSharp(N.c,N.c.height*L.s,false)||pxTex(N.c);PX.net.position.set(L.ox+N.x0*L.s,L.oy+N.y0*L.s);PX.net.width=N.c.width*L.s;PX.net.height=N.c.height*L.s;PX.net.visible=true}else PX.net.visible=false;
   // vignette (screen space)
   const vw=Math.ceil(W/4),vh=Math.ceil(H/4);PX.vig.texture=PIXI.Texture.from(pxCanvas(vw,vh,(g,w,hh)=>{const v=g.createRadialGradient(w/2,hh*.48,Math.min(w,hh)*.35,w/2,hh*.48,Math.max(w,hh)*.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.5)');g.fillStyle=v;g.fillRect(0,0,w,hh)}));PX.vig.width=W;PX.vig.height=H;
+  pxWarm();
 }
 function pxSpr(tex){let sp=PX.pool[PX.used++];if(!sp){sp=new PIXI.Sprite();PX.pool.push(sp)}sp.texture=tex;sp.visible=true;sp.alpha=1;sp.rotation=0;sp.tint=0xffffff;sp.blendMode='normal';sp.anchor.set(0);sp.scale.set(1);PX.world.addChild(sp);return sp}
 function pxAdd(o){PX.world.addChild(o);return o}
@@ -1193,7 +1220,7 @@ function pxDraw(t){
 // steps effects down when a phone can't keep up (only measured while the page is visible)
 const PERF={n:0,sum:0};
 function pxPerf(dt){if(!PX.ok||document.visibilityState!=='visible')return;PERF.sum+=dt;PERF.n++;if(PERF.n<90)return;const avg=PERF.sum/PERF.n;PERF.n=PERF.sum=0;
-  if(avg>.034&&PX.fx>0){PX.fx--;if(PX.fx===0){PX.app.renderer.resolution=1;DPR=1;resize()}console.info('effects level',PX.fx)}}
+  if(avg>.034&&PX.fx>0){PX.fx--;console.info('effects level',PX.fx)}} // only effects step down, never sharpness
 
 /* ---------------- Loop ---------------- */
 let last=real();
