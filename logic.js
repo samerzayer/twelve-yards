@@ -105,8 +105,10 @@ export function applyAction(state, playerId, action) {
   let outcome = "goal", kind = "";
   if (e > thr(z)) {
     outcome = "miss";
-    kind = high && (!corner || rand(seed, 0) < 0.55) ? "over" : (rand(seed, 1) < 0.3 ? "post" : "wide");
+    if (high && rand(seed, 3) < 0.3) kind = "bar"; // rattles the crossbar and stays out
+    else kind = high && (!corner || rand(seed, 0) < 0.55) ? "over" : (rand(seed, 1) < 0.3 ? "post" : "wide");
   } else if (rand(seed, 2) < saveChance(z, kz, e)) outcome = "save";
+  else if (high && e > 0.2 && rand(seed, 4) < 0.2) kind = "barin"; // goal off the underside of the bar
 
   const res = { ...state.res, [shooter]: [...state.res[shooter], outcome === "goal" ? "goal" : "miss"] };
   return {
