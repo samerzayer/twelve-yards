@@ -1072,7 +1072,7 @@ function ballState(t){ // where the ball is this frame (shared by both renderers
    floodlight bloom (baked once), shockwaves on impact, a rippling net, motion blur on the ball and
    cinematic colour in slow motion. If WebGL or the files are missing, the canvas renderer keeps going.
    Effects step down by themselves on slow phones (PX.fx 2 -> 1 -> 0). Add ?canvas to the URL to force the old renderer. */
-const PX={ok:false,on:false,fx:2,pool:[],used:0,tex:new Map(),sharp:new Map(),bake:{},bakeKey:{},shocks:[],slow:0};
+const PX={ok:false,on:false,fx:2,fails:0,probe:0,building:false,pool:[],used:0,tex:new Map(),sharp:new Map(),bake:{},bakeKey:{},shocks:[],slow:0};
 const mips=(w,h)=>Math.floor(Math.log2(Math.max(w,h,1)))+1;
 function pxTex(src){ // textures with mipmaps, so big art shrinks smoothly instead of looking jagged
   let t=PX.tex.get(src);if(t)return t;const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,Src=src instanceof HTMLCanvasElement?PIXI.CanvasSource:PIXI.ImageSource;
@@ -1113,7 +1113,8 @@ async function initPixi(){
     const app=new PIXI.Application();
     await app.init({width:W||innerWidth,height:H||innerHeight,resolution:DPR,autoDensity:true,antialias:(window.devicePixelRatio||1)<2,backgroundColor:0x04070e,autoStart:false,preference:'webgl',powerPreference:'high-performance'});
     const c=app.canvas;c.setAttribute('aria-hidden','true');
-    c.addEventListener('webglcontextlost',e=>{e.preventDefault();pxLost()});c.addEventListener('webglcontextrestored',()=>pxRestart());c.style.position='absolute';c.style.left='0';c.style.top='0';c.style.pointerEvents='none';cv.after(c);
+    const mine=()=>PX.app&&PX.app.canvas===c; // ignore signals from canvases already replaced
+    c.addEventListener('webglcontextlost',e=>{e.preventDefault();if(!mine())return;pxLost();if(!document.hidden)pxRebuild('context lost')});c.addEventListener('webglcontextrestored',()=>{if(mine())pxRebuild('context restored')});c.style.position='absolute';c.style.left='0';c.style.top='0';c.style.pointerEvents='none';cv.after(c);
     const F=PIXI.filters;PX.app=app;
     PX.T={shadow:pxTex(radial([[0,'rgba(0,0,0,1)'],[1,'rgba(0,0,0,0)']])),glow:pxTex(radial([[0,'rgba(255,255,255,1)'],[.22,'rgba(255,255,255,.55)'],[1,'rgba(255,255,255,0)']])),
       dot:pxTex(radial([[0,'rgba(255,255,255,1)'],[.7,'rgba(255,255,255,1)'],[1,'rgba(255,255,255,0)']],32)),white:PIXI.Texture.WHITE};
@@ -1133,9 +1134,26 @@ async function initPixi(){
 }
 // phones can drop the graphics chip's memory when the game is in the background: keep playing on the
 // canvas renderer at once, and rebuild the GPU renderer when the page is visible again
+// iPhones can also wipe the GPU picture without any warning, so: rebuild after every trip away from the page,
+// check that the picture is really there, and fall back to the canvas renderer if the GPU keeps failing
 function pxLost(){if(!PX.ok)return;PX.ok=false;PX.lost=true;try{PX.app.canvas.style.display='none'}catch(e){}resize();console.info('GPU renderer lost; using canvas')}
-function pxRestart(){try{PX.app&&PX.app.destroy(true)}catch(e){}PX.app=null;PX.ok=false;PX.lost=false;PX.tex=new Map();PX.sharp=new Map();PX.bake={};PX.bakeKey={};PX.pool=[];PX.used=0;PX.shocks=[];PX.lastBall=null;initPixi()}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&PX.lost)setTimeout(pxRestart,300)});
+async function pxRestart(){try{PX.app&&PX.app.destroy(true)}catch(e){}PX.app=null;PX.ok=false;PX.lost=false;PX.tex=new Map();PX.sharp=new Map();PX.bake={};PX.bakeKey={};PX.pool=[];PX.used=0;PX.shocks=[];PX.lastBall=null;resize();await initPixi();if(PX.ok){PX.probe=3;if(loaded>=total){PX.bake={};pxWarm()}}}
+function pxRebuild(why){
+  if(PX.building||new URLSearchParams(location.search).has('canvas'))return;
+  if(PX.ok){PX.ok=false;try{PX.app.canvas.style.display='none'}catch(e){}resize()} // keep drawing on the canvas meanwhile
+  if(++PX.fails>4){console.warn('GPU renderer keeps failing; staying on canvas');try{PX.app&&PX.app.destroy(true)}catch(e){}PX.app=null;return}
+  console.info('rebuilding GPU renderer:',why);PX.building=true;
+  setTimeout(()=>pxRestart().finally(()=>{PX.building=false}),250);
+}
+// one pixel read back from the GPU: a wiped or lost picture reads as fully transparent
+function pxAlive(){try{const gl=PX.app.renderer.gl;if(!gl||gl.isContextLost())return false;const px=new Uint8Array(4);gl.readPixels(gl.drawingBufferWidth>>1,gl.drawingBufferHeight>>1,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);return px[3]>0}catch(e){return false}}
+let pxHiddenAt=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){pxHiddenAt=real();return}
+  if(PX.lost||(PX.app&&real()-pxHiddenAt>1))pxRebuild('back from background');
+});
+addEventListener('pageshow',e=>{if(e.persisted&&PX.app)pxRebuild('page restored')});
+setInterval(()=>{if(PX.ok&&!document.hidden)PX.probe=Math.max(PX.probe||0,1)},4000);
 function pxBakeBg(key){ // stadium shrunk to its exact display size, floodlight glow baked in once
   const im=IMG[key];if(!im||!im.naturalWidth)return null;
   const tw=Math.min(im.naturalWidth,Math.round(L.dw*DPR*1.08)),th=Math.round(tw*im.naturalHeight/im.naturalWidth),ck=key+tw;
@@ -1293,7 +1311,14 @@ function update(){
   return t;
 }
 let lastF=real();
-function loop(){const t=update(),n=real();pxPerf(n-lastF);lastF=n;(PX.ok?pxDraw:draw)(t);requestAnimationFrame(loop)}
+function loop(){
+  requestAnimationFrame(loop); // queue the next frame first, so one bad frame can never freeze the game
+  const t=update(),n=real();pxPerf(n-lastF);lastF=n;
+  if(PX.ok){
+    try{pxDraw(t)}catch(e){console.warn('GPU frame failed',e);PX.on=false;pxRebuild('frame error');draw(t);return}
+    if(PX.probe>0){PX.probe--;if(!pxAlive()){PX.probe=0;pxRebuild('blank picture');draw(t)}else if(PX.probe===0)PX.fails=0}
+  }else draw(t);
+}
 
 /* ---------------- Input ---------------- */
 function zoneAt(e){
