@@ -43,8 +43,8 @@ function saveChance(sz, kz) {
   }
   return p;
 }
-// small risk of missing the target: top corners are the riskiest
-function missChance(z) { const c = z % 3, r = (z / 3) | 0; return r === 0 ? (c === 1 ? 0.04 : 0.09) : (c === 1 ? 0.02 : 0.05); }
+// you pick the spot, so every shot is on target: it is a goal or a save
+function missChance() { return 0; }
 
 export function setup(players) {
   const res = {};

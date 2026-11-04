@@ -785,7 +785,7 @@ function saveChance(sz,kz){
     else if(kc===1)p=.05;else if(sc===1)p=sr===1?.18:.08}
   return p;
 }
-const missChance=z=>{const c=z%3,r=(z/3)|0;return r===0?(c===1?.04:.09):(c===1?.02:.05)};
+const missChance=()=>0; // every shot is on target: goal or save
 function launch(o,R=Math.random){
   const rr=(a,b)=>a+R()*(b-a);
   const t=S.clock,Z=L.zones[o.zone],c=Z.c,r=Z.r,corner=c!==1,high=r===0;
