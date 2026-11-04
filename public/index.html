@@ -202,6 +202,30 @@ a.btn{text-decoration:none;display:inline-block}
 .dot.goal{background:var(--lime);border-color:var(--lime);color:#0b1400}
 .dot.next{box-shadow:0 0 0 3px rgba(198,255,61,.3)}
 #strike{width:100%}
+.seg,#meter{display:none!important}
+/* online lobby */
+.duo{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;width:100%}
+.pl{display:grid;gap:2px;padding:10px 8px;background:rgba(7,12,26,.88);clip-path:var(--slant);min-width:0}
+.pl b{font-family:var(--cond);font-style:italic;font-weight:900;font-size:22px;letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl small{font-family:var(--cond);font-style:italic;font-weight:800;font-size:12px;letter-spacing:.14em;color:var(--muted)}
+.pl.me{box-shadow:inset 0 -4px 0 var(--you)}.pl.them{box-shadow:inset 0 -4px 0 var(--rival)}
+.pl.ok small{color:var(--lime)}.pl.wait small{color:var(--gold)}
+.pl.talking{outline:2px solid var(--lime);outline-offset:-2px}
+.duo .vs{font-family:var(--cond);font-style:italic;font-weight:900;font-size:18px;color:var(--muted)}
+.codebox{display:grid;justify-items:center;gap:0;width:100%;background:rgba(7,12,26,.88);padding:8px 0 10px;clip-path:var(--slant)}
+.codebox small{font-family:var(--cond);font-style:italic;font-weight:800;font-size:12px;letter-spacing:.2em;color:var(--muted)}
+.codebox b{font-family:var(--cond);font-style:italic;font-weight:900;font-size:44px;letter-spacing:.18em;color:var(--lime);line-height:1}
+.linkbox{font-size:12px;padding:6px 10px;opacity:.75}
+.joinrow input{font-family:var(--cond);font-style:italic;font-weight:900;letter-spacing:.2em;text-transform:uppercase;background:rgba(7,12,26,.75);border:0;border-bottom:2px solid rgba(255,255,255,.25);border-radius:0}
+.countdown{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;pointer-events:none;background:radial-gradient(circle at 50% 45%,rgba(7,12,26,.55),rgba(7,12,26,.85))}
+.countdown small{font-family:var(--cond);font-style:italic;font-weight:800;font-size:16px;letter-spacing:.3em;color:var(--lime)}
+.countdown b{font-family:var(--cond);font-style:italic;font-weight:900;font-size:clamp(96px,30vw,180px);line-height:.9;color:#fff;text-shadow:0 8px 40px rgba(0,0,0,.6)}
+.countdown b.pop{animation:cdpop .5s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes cdpop{from{transform:scale(2.2);opacity:0}to{transform:none;opacity:1}}
+.icon-btn.vc.on{background:var(--lime);color:#0b1400;border-color:var(--lime)}
+.icon-btn.vc.muted{background:var(--rival);color:#fff;border-color:var(--rival)}
+.icon-btn.vc.talking{box-shadow:0 0 0 4px rgba(198,255,61,.45)}
+#vcBtn.on{background:var(--lime);color:#0b1400}#vcBtn.muted{background:var(--rival);color:#fff}
 /* compact HUD text: nothing big over the pitch */
 .role{font-size:clamp(20px,4.6vw,30px)!important}
 .hint{font-size:13px}
@@ -295,6 +319,7 @@ a.btn{text-decoration:none;display:inline-block}
           <div class="row rival"><i class="chip"></i><b id="rivalName">RIVAL</b><span class="dots" id="dRival"></span><em class="sc" id="sRival">0</em></div>
         </div>
       </div>
+      <button class="icon-btn vc" id="vcHud" hidden aria-label="Voice chat"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12z"/></svg></button>
       <button class="icon-btn" id="mute" aria-label="Mute sound">
         <svg id="icoOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg>
         <svg id="icoOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" hidden><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
@@ -316,6 +341,7 @@ a.btn{text-decoration:none;display:inline-block}
 
   <div class="net" id="netNote" hidden></div>
   <div class="roleframe" id="roleFrame"></div>
+  <div class="countdown" id="cd" hidden><small>KICK-OFF</small><b id="cdNum">3</b></div>
   <div class="banner" id="banner" hidden><div class="rc"><small id="bannerSub"></small><span id="bannerTxt"></span></div></div>
   <div class="replaytag" id="replayTag" hidden><i></i>REPLAY</div>
   <div class="replayskip" id="replaySkip" hidden>TAP TO SKIP</div>
@@ -345,17 +371,25 @@ a.btn{text-decoration:none;display:inline-block}
     <div class="card">
       <div class="eyebrow" id="lobbyEyebrow">ONLINE 1V1</div>
       <div class="title" id="lobbyTitle">VS FRIEND</div>
+      <div class="duo" id="duo" hidden>
+        <div class="pl me"><b id="pMe">YOU</b><small id="pMeS">JOINED</small></div>
+        <span class="vs">VS</span>
+        <div class="pl them"><b id="pThem">WAITING…</b><small id="pThemS">SHARE THE LINK</small></div>
+      </div>
       <label class="fld" for="nick"><span>YOUR NAME</span><input id="nick" maxlength="12" autocomplete="off" placeholder="e.g. Samer"></label>
       <div class="teamsel" data-teamsel></div>
       <div id="inviteBox" class="lgrid" hidden>
+        <div class="codebox"><small>MATCH CODE</small><b id="codeOut"></b></div>
+        <div class="actions"><button class="btn wide" id="shareBtn">SHARE LINK</button><button class="btn ghost wide" id="copyLink">COPY LINK</button></div>
         <div class="linkbox" id="linkOut"></div>
-        <div class="actions"><a class="btn wide" id="waBtn" target="_blank" rel="noopener">WHATSAPP</a><button class="btn ghost wide" id="copyLink">COPY LINK</button></div>
+        <div class="joinrow"><input id="codeIn" maxlength="8" autocomplete="off" placeholder="FRIEND'S CODE" aria-label="Friend's match code"><button class="btn ghost" id="codeGo">JOIN</button></div>
       </div>
       <div id="joinBox" class="lgrid" hidden>
-        <button class="btn go wide" id="joinPlay">PLAY</button>
+        <button class="btn go wide" id="joinPlay">JOIN MATCH</button>
       </div>
+      <button class="btn alt wide" id="vcBtn" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12z"/></svg><span id="vcBtnTxt">VOICE CHAT</span></button>
       <div class="lobbymsg" id="lobbyMsg"></div>
-      <button class="btn ghost" id="lobbyBack">BACK</button>
+      <button class="btn ghost" id="lobbyBack">LEAVE</button>
     </div>
   </div>
 
@@ -475,10 +509,10 @@ const DIFF=[
   {name:'PRO',needle:6.0,ramp:.3,surge:.5,thr:1,save:1,ksave:1,learn:1.1,fav:1.8,botAcc:.58,botTop:.85,keepTime:4.5}, // also used online (server rules = PRO)
   {name:'LEGEND',needle:7.6,ramp:.4,surge:.6,thr:.88,save:1.08,ksave:.92,learn:2.1,fav:1.25,botAcc:.5,botTop:1.1,keepTime:3.6}
 ];
-let diff=1;
+let diff=1; // one level now (the old AMATEUR/PRO/LEGEND buttons are gone)
 function store(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k)||'null');localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}}
 const rec=store('ty_rec')||{w:[0,0,0],l:[0,0,0]};
-function showRecord(){$('#record').innerHTML=`<b>${rec.w[diff]}W</b> · <em>${rec.l[diff]}L</em>`;$('#oRecord').textContent=`${DIFF[diff].name} · ${rec.w[diff]}W ${rec.l[diff]}L`}
+function showRecord(){$('#record').innerHTML=`<b>${rec.w[diff]}W</b> · <em>${rec.l[diff]}L</em>`;$('#oRecord').textContent=`RECORD · ${rec.w[diff]}W ${rec.l[diff]}L`}
 document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{diff=+b.dataset.d;document.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));$('#bDiff').textContent=DIFF[diff].name;showRecord()}));
 showRecord();
 $('#howBtn').addEventListener('click',()=>{const p=$('#howPop'),open=p.hidden;p.hidden=!open;$('#howBtn').setAttribute('aria-expanded',open)});
@@ -694,7 +728,7 @@ function startGame(){
   S.stats={shots:0,goals:0,saves:0,power:0};S.revealTok++;S.lastReplay=-9;
   if(!online())pickBotTeam();applyTeams();S.botFav=Math.random()<.5?0:2;S.botKeepFav=Math.random()<.5?0:2;S.botHigh=Math.random()<.5;
   $('#menu').hidden=true;$('#over').hidden=true;$('#lobby').hidden=true;
-  $('#bDiff').textContent=online()?'ONLINE':DIFF[diff].name;$('#rivalName').textContent=online()?(ON.oppName||'RIVAL').slice(0,7).toUpperCase():TM.rival;
+  $('#bDiff').textContent=online()?'ONLINE':'VS CPU';$('#rivalName').textContent=online()?(ON.oppName||'RIVAL').slice(0,7).toUpperCase():TM.rival;
   renderBoard();startTurn();
 }
 function startTurn(){
@@ -719,20 +753,12 @@ function setPrompt(r,h){$('#role').innerHTML=r;$('#hint').textContent=h}
 const THR=z=>{const c=z%3,r=(z/3)|0;return r===0?(c===1?.55:.4):(c===1?.85:.6)};
 const DD=()=>online()?DIFF[1]:DIFF[diff]; // online always plays to PRO rules
 const myThr=z=>Math.min(.95,THR(z)*DD().thr); // your on-target window
-function pickAim(z){
-  S.aim=z;S.phase='power';S.meterStart=real();setDeadline(3.5);
-  const sd=S.res.you.length>=5;
-  const MD=DD(); // online is always PRO so both players get the same meter
-  S.speed=MD.needle+MD.ramp*Math.min(S.yourKicks,6)+(sd?.8:0);S.mPhase=Math.random()*6.28;S.mVar=Math.random()*6.28;S.mLast=real();
-  const thr=myThr(z);
-  const a=(.5-thr/2)*100,b=(.5+thr/2)*100;
-  $('.track').style.background=`linear-gradient(90deg,#5c0f16 0%,#ff4048 ${a-.1}%,#3ddc84 ${a+.1}%,#3ddc84 44%,#ffd34d 44%,#ffd34d 56%,#3ddc84 56%,#3ddc84 ${b-.1}%,#ff4048 ${b+.1}%,#5c0f16 100%)`;
-  $('#meter').hidden=false;$('#read').hidden=true;$('#mZone').textContent=['TOP','LOW'][(z/3)|0]+' '+['LEFT','CENTRE','RIGHT'][z%3];
-  setPrompt('<span class="tag">STRIKE</span>','Green = on target · Gold = power');
+function pickAim(z){ // tap where to shoot — that's it
+  if(S.phase!=='aim')return;S.aim=z;const e=rnd(.04,.3);S.yourKicks++;
+  if(online()){sendMove([z,Math.round(e*1000)]);S.phase='wait';setPrompt('SHOT <span class="tag">LOCKED</span>',`Waiting for ${ON.oppName||'your friend'}…`);tryResolve();return}
+  launch({shooter:'you',zone:z,e,kz:botDive()});
 }
-function strike(){if(S.phase!=='power')return;const e=Math.abs(S.needle-.5)*2;S.yourKicks++;
-  if(online()){sendMove([S.aim,Math.round(e*1000)]);S.phase='wait';$('#meter').hidden=true;setPrompt('SHOT <span class="tag">LOCKED</span>',`Waiting for ${ON.oppName||'your friend'}…`);tryResolve();return}
-  launch({shooter:'you',zone:S.aim,e,kz:botDive()})}
+function strike(){}
 function pickDive(z){if(S.phase!=='keep')return;
   if(online()){sendMove(z);S.phase='wait';S.myDive=z;setPrompt('DIVE <span class="tag">LOCKED</span>',`Waiting for ${ON.oppName||'your friend'}…`);tryResolve();return}
   launch({shooter:'rival',zone:S.pending.z,e:S.pending.e,kz:z})}
@@ -742,8 +768,7 @@ function botShot(){
   const lastSaved=S.hist.botShots.length&&S.res.rival[S.res.rival.length-1]==='miss';
   const w=[0,1,2].map(c=>(c===S.botFav?D.fav:1)*(c===1?.6:1)/(1+dc[c]*D.learn*.4)*(lastSaved&&S.hist.botShots[S.hist.botShots.length-1]%3===c?.5:1));
   const c=pickW(w);let r=Math.random()<(S.botHigh?.5:.3)*D.botTop?0:1;
-  const e=Math.random()<D.botAcc?rnd(0,.42):rnd(.3,1);
-  return{z:r*3+c,e};
+  return{z:r*3+c,e:rnd(.04,.3)};
 }
 function botDive(){
   const D=DIFF[diff],cc=[0,0,0],rc=[0,0];
@@ -751,27 +776,23 @@ function botDive(){
   const w=[];for(let z=0;z<6;z++){const c=z%3,r=(z/3)|0;w.push((1+cc[c]*D.learn)*(1+rc[r]*D.learn*.45)*(c===1?.6:1)*(c===S.botKeepFav?1.35:1))}
   return pickW(w);
 }
-function saveChance(sz,kz,e){
-  const sc=sz%3,sr=(sz/3)|0;
-  let p=0;
-  if(kz<0){p=sc===1?(sr===1?.75:.5):0}
+// same rules as the server (logic.js): you choose the spot, the keeper guesses; most kicks go in
+function saveChance(sz,kz){
+  const sc=sz%3,sr=(sz/3)|0;let p=0;
+  if(kz<0)p=sc===1?(sr===1?.6:.35):0;
   else{const kc=kz%3,kr=(kz/3)|0;
-    if(kc===sc){
-      if(kr===sr)p=sc===1?.96:(sr===0?.8:.92);
-      else p=sc===1?(kr===0?.5:.45):(sr===0?.4:.6);
-    }else if(kc===1)p=.1;
-    else if(sc===1)p=sr===1?.3:.15;
-  }
-  if(p>0){if(e<.12)p-=.15;else if(e>.3)p+=.12}
-  return clamp(p,0,.98);
+    if(kc===sc){if(kr===sr)p=sc===1?.8:(sr===0?.6:.72);else p=sc===1?(kr===0?.35:.3):(sr===0?.25:.4)}
+    else if(kc===1)p=.05;else if(sc===1)p=sr===1?.18:.08}
+  return p;
 }
+const missChance=z=>{const c=z%3,r=(z/3)|0;return r===0?(c===1?.04:.09):(c===1?.02:.05)};
 function launch(o,R=Math.random){
   const rr=(a,b)=>a+R()*(b-a);
   const t=S.clock,Z=L.zones[o.zone],c=Z.c,r=Z.r,corner=c!==1,high=r===0;
   let outcome='goal',kind='';
-  if(o.e>(o.shooter==='you'?myThr(o.zone):THR(o.zone))){outcome='miss';kind=high&&R()<.3?'bar':high&&(!corner||R()<.55)?'over':(R()<.3?'post':'wide')}
-  else if(R()<clamp(saveChance(o.zone,o.kz,o.e)*(o.shooter==='you'?DD().save:DD().ksave),0,.98))outcome='save';
-  else if(high&&o.e>.2&&R()<.2)kind='barin';
+  if(R()<missChance(o.zone)){outcome='miss';kind=high&&R()<.3?'bar':high&&(!corner||R()<.55)?'over':(R()<.3?'post':'wide')}
+  else if(R()<saveChance(o.zone,o.kz))outcome='save';
+  else if(high&&R()<.12)kind='barin';
   if(o.forced){outcome=o.forced.outcome;kind=o.forced.kind||(outcome==='miss'?'wide':'')}
   const j=o.e*L.gw*.05;
   let tx=Z.x+rr(-j,j),ty=Z.y+rr(-j,j)*.5;
@@ -856,7 +877,7 @@ function endGame(){
   const ga=goals('you'),gb=goals('rival'),win=ga>gb,sd=S.res.you.length>5;
   if(!online()){if(win)rec.w[diff]++;else rec.l[diff]++;store('ty_rec',rec);showRecord()}
   else $('#oRecord').textContent='ONLINE MATCH';
-  $('#oEyebrow').textContent=(sd?'SUDDEN DEATH':'FULL TIME')+' · '+(online()?'ONLINE':DIFF[diff].name);
+  $('#oEyebrow').textContent=(sd?'SUDDEN DEATH':'FULL TIME')+' · '+(online()?'ONLINE':'VS CPU');
   $('#oTitle').textContent=win?'VICTORY':(online()?`${(ON.oppName||'Rival').toUpperCase()} WINS`:'DEFEAT');$('#oTitle').className='title '+(win?'win':'lose');
   $('#again').textContent='REMATCH';$('#again').disabled=false;
   document.querySelectorAll('.rivalNm').forEach(e=>e.textContent=online()?(ON.oppName||'RIVAL').toUpperCase():teamOf(TM.rival)[1].toUpperCase());
@@ -1088,10 +1109,11 @@ const loadScript=src=>new Promise((r,j)=>{const el=document.createElement('scrip
 async function initPixi(){
   if(new URLSearchParams(location.search).has('canvas'))return;
   try{
-    await loadScript('vendor/pixi.min.js');await loadScript('vendor/pixi-filters.js');
+    if(!window.PIXI)await loadScript('vendor/pixi.min.js');if(!(window.PIXI&&PIXI.filters))await loadScript('vendor/pixi-filters.js');
     const app=new PIXI.Application();
-    await app.init({width:W||innerWidth,height:H||innerHeight,resolution:DPR,autoDensity:true,antialias:true,backgroundColor:0x04070e,autoStart:false,preference:'webgl',powerPreference:'high-performance'});
-    const c=app.canvas;c.setAttribute('aria-hidden','true');c.style.position='absolute';c.style.left='0';c.style.top='0';c.style.pointerEvents='none';cv.after(c);
+    await app.init({width:W||innerWidth,height:H||innerHeight,resolution:DPR,autoDensity:true,antialias:(window.devicePixelRatio||1)<2,backgroundColor:0x04070e,autoStart:false,preference:'webgl',powerPreference:'high-performance'});
+    const c=app.canvas;c.setAttribute('aria-hidden','true');
+    c.addEventListener('webglcontextlost',e=>{e.preventDefault();pxLost()});c.addEventListener('webglcontextrestored',()=>pxRestart());c.style.position='absolute';c.style.left='0';c.style.top='0';c.style.pointerEvents='none';cv.after(c);
     const F=PIXI.filters;PX.app=app;
     PX.T={shadow:pxTex(radial([[0,'rgba(0,0,0,1)'],[1,'rgba(0,0,0,0)']])),glow:pxTex(radial([[0,'rgba(255,255,255,1)'],[.22,'rgba(255,255,255,.55)'],[1,'rgba(255,255,255,0)']])),
       dot:pxTex(radial([[0,'rgba(255,255,255,1)'],[.7,'rgba(255,255,255,1)'],[1,'rgba(255,255,255,0)']],32)),white:PIXI.Texture.WHITE};
@@ -1109,6 +1131,11 @@ async function initPixi(){
     PX.ok=true;resize();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);
   }catch(e){console.warn('GPU renderer unavailable, using canvas:',e);PX.ok=false;if(PX.app){try{PX.app.canvas.remove();PX.app.destroy()}catch(_){}}}
 }
+// phones can drop the graphics chip's memory when the game is in the background: keep playing on the
+// canvas renderer at once, and rebuild the GPU renderer when the page is visible again
+function pxLost(){if(!PX.ok)return;PX.ok=false;PX.lost=true;try{PX.app.canvas.style.display='none'}catch(e){}resize();console.info('GPU renderer lost; using canvas')}
+function pxRestart(){try{PX.app&&PX.app.destroy(true)}catch(e){}PX.app=null;PX.ok=false;PX.lost=false;PX.tex=new Map();PX.sharp=new Map();PX.bake={};PX.bakeKey={};PX.pool=[];PX.used=0;PX.shocks=[];PX.lastBall=null;initPixi()}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&PX.lost)setTimeout(pxRestart,300)});
 function pxBakeBg(key){ // stadium shrunk to its exact display size, floodlight glow baked in once
   const im=IMG[key];if(!im||!im.naturalWidth)return null;
   const tw=Math.min(im.naturalWidth,Math.round(L.dw*DPR*1.08)),th=Math.round(tw*im.naturalHeight/im.naturalWidth),ck=key+tw;
@@ -1214,7 +1241,7 @@ function pxDraw(t){
   PX.flash.clear();if(S.flash>0)PX.flash.rect(0,0,W,H).fill({color:0xfffaeb,alpha:S.flash});
   // post effects
   const fl=[],slow=clamp((1-S.ts)/.6,0,1);
-  if(!RM&&(PX.fx>=2||slow>.02)){ // grading: a touch of punch normally, cooler and moodier in slow motion
+  if(!RM&&slow>.02){ // colour grading only during slow motion (a full-screen pass every frame costs phones dearly) // grading: a touch of punch normally, cooler and moodier in slow motion
     if(Math.abs(slow-PX.slow)>.01||!PX.gradeSet){PX.slow=slow;PX.gradeSet=1;const g=PX.grade;g.contrast(.1+.18*slow,false);g.saturate(.12-.45*slow,true);if(slow>.02)g.brightness(1-.06*slow,true)}
     fl.push(PX.grade)}
   const now=real();PX.shocks=PX.shocks.filter(sh=>now-sh.t0<sh.life);
@@ -1240,7 +1267,7 @@ function update(){
   const gdt=dt*S.ts;S.clock+=gdt;const t=S.clock;
   if(L){const T=camTarget(t),k=1-Math.exp(-dt*2.5);S.cam.x=lerp(S.cam.x||W/2,T.x,k);S.cam.y=lerp(S.cam.y||H/2,T.y,k);S.cam.z=lerp(S.cam.z,T.z,k)}
   if(['aim','power','keep'].includes(S.phase)){
-    const left=Math.max(0,S.deadline-rt);$('#tbar').style.transform=`scaleX(${left/S.dur})`;
+    const left=Math.max(0,S.deadline-rt);(S.tbarEl||(S.tbarEl=$('#tbar'))).style.transform=`scaleX(${left/S.dur})`;
     if(left<=0){
       if(S.phase==='aim')pickAim((Math.random()*6)|0);
       else if(S.phase==='power'){S.needle=Math.random();strike()}
@@ -1289,10 +1316,10 @@ window.addEventListener('keydown',e=>{
 $('#strike').addEventListener('click',()=>{AU.init();strike()});
 $('#start').addEventListener('click',()=>{AU.init();S.mode='bot';startGame()});
 $('#again').addEventListener('click',()=>{AU.init();if(online())askRematch();else startGame()});
-$('#menuBtn').addEventListener('click',()=>{leaveOnline();$('#over').hidden=true;$('#menu').hidden=false;S.phase='menu';S.mode='bot';S.anim=null;$('#rivalName').textContent='RIVAL';renderBoard();renderTeamSel()});
+$('#menuBtn').addEventListener('click',()=>{if(online())leaveOnline();$('#over').hidden=true;$('#menu').hidden=false;S.phase='menu';S.mode='bot';S.anim=null;$('#rivalName').textContent='RIVAL';renderBoard();renderTeamSel()});
 
 /* ---------------- Online: 1v1 over the game server (rooms at /ws/<code>) ---------------- */
-const ON={role:'',oppName:'',code:'',ws:null,retry:0,view:null,status:'',connected:0,named:false,want:false,closing:false};
+const ON={role:'',oppName:'',code:'',ws:null,retry:0,view:null,status:'',connected:0,named:false,want:false,closing:false,players:[],me:null,opp:null,counting:false};
 const qs=new URLSearchParams(location.search);
 const cleanName=s=>String(s||'').replace(/[^\p{L}\p{N} _.-]/gu,'').trim().slice(0,12);
 let PID=null;
@@ -1307,9 +1334,9 @@ function connectRoom(code){
   ON.code=code;ON.closing=false;
   const proto=location.protocol==='https:'?'wss:':'ws:';
   const ws=new WebSocket(`${proto}//${location.host}/ws/${encodeURIComponent('ty-'+code)}`);ON.ws=ws;
-  ws.addEventListener('open',()=>{ON.retry=0;ON.lastPong=real();netNote('');wsSend({type:'join',playerId:pidGet()})});
+  ws.addEventListener('open',()=>{ON.retry=0;ON.lastPong=real();netNote('');wsSend(joinMsg());roomSave(code)});
   ws.addEventListener('message',ev=>{ON.lastPong=real();if(ev.data==='__pong')return;let m;try{m=JSON.parse(ev.data)}catch(e){return}
-    if(m.type==='state')onState(m);else if(m.type==='error'&&!/stale|already/.test(m.error||''))console.warn('server:',m.error)});
+    if(m.type==='state')onState(m);else if(m.type==='rtc')vcSignal(m.data);else if(m.type==='error'&&!/stale|already/.test(m.error||''))console.warn('server:',m.error)});
   ws.addEventListener('close',()=>{if(ON.closing||ON.ws!==ws)return;ON.retry=Math.min(ON.retry+1,5);netNote('Connection lost. Reconnecting…');setTimeout(()=>{if(!ON.closing&&ON.ws===ws)connectRoom(code)},500*2**(ON.retry-1))});
 }
 function reconnect(){if(!ON.code||ON.closing)return;const old=ON.ws;ON.ws=null;try{old&&old.close()}catch(e){}connectRoom(ON.code)}
@@ -1318,36 +1345,62 @@ setInterval(()=>{const ws=ON.ws;if(!ws||ON.closing)return;if(ws.readyState===1){
 // back in the game (after sharing the link on WhatsApp, switching apps, waking the phone): catch up at once
 function netResync(){if(!ON.code||ON.closing)return;const ws=ON.ws;
   if(!ws||ws.readyState>1){reconnect();return}
-  if(ws.readyState===1){const t0=real();wsSend({type:'join',playerId:pidGet()});ws.send('__ping');setTimeout(()=>{if(ON.ws===ws&&(ON.lastPong||0)<t0)reconnect()},3000)}}
+  if(ws.readyState===1){const t0=real();wsSend(joinMsg());ws.send('__ping');setTimeout(()=>{if(ON.ws===ws&&(ON.lastPong||0)<t0)reconnect()},3000)}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)netResync()});
 addEventListener('pageshow',netResync);addEventListener('focus',netResync);addEventListener('online',netResync);
 function netNote(t){const n=$('#netNote');n.textContent=t;n.hidden=!t}
+const roomSave=code=>{try{sessionStorage.setItem('ty:room',code)}catch(e){}},roomClear=()=>{try{sessionStorage.removeItem('ty:room')}catch(e){}};
+const roomSaved=()=>{try{return sessionStorage.getItem('ty:room')}catch(e){return null}};
+const joinMsg=()=>({type:'join',playerId:pidGet(),name:myName()||'Player',team:TM.you});
+function showLobby(){$('#menu').hidden=true;$('#over').hidden=true;$('#lobby').hidden=false}
+function renderDuo(me,opp,status){
+  $('#duo').hidden=false;$('#joinBox').hidden=true;
+  $('#pMe').textContent=(me.name||'YOU').toUpperCase();$('#pMeS').textContent=me.ready?'READY':'HERE';$('#pMe').parentElement.className='pl me ok';
+  const th=$('#pThem').parentElement;
+  if(!opp){$('#pThem').textContent='WAITING…';$('#pThemS').textContent='SHARE THE LINK';th.className='pl them wait'}
+  else{$('#pThem').textContent=(opp.name||'FRIEND').toUpperCase();$('#pThemS').textContent=!opp.online?'AWAY':opp.ready?'READY':'JOINING…';th.className='pl them '+(opp.online&&opp.ready?'ok':'wait')}
+  $('#inviteBox').hidden=!!opp||ON.role!=='host';
+  lmsg(!opp?'Waiting for your friend to join…':!opp.online?`${opp.name||'Your friend'} stepped away. The match starts when they're back.`:status==='lobby'?'Both here. Starting…':'');
+  vcUI();
+}
 function onState(m){
-  ON.status=m.status;ON.connected=m.connected;const v=m.view;ON.view=v;
-  if(m.status==='waiting'){
-    if(m.seats&&m.seats.length>=2){lmsg('The room is full. Ask your friend for a new link.',true)}
-    else lmsg('Waiting for your friend to open the link…');
+  ON.status=m.status;ON.connected=m.connected;ON.view=m.view;ON.players=m.players||[];
+  const me=ON.players.find(p=>p.id===pidGet()),opp=ON.players.find(p=>p.id!==pidGet());ON.me=me;ON.opp=opp;
+  if(!me){showLobby();$('#joinBox').hidden=true;lmsg('This match already has two players. Ask your friend for a new link.',true);return}
+  ON.role=m.seats.indexOf(pidGet())===0?'host':'guest';ON.oppName=opp?(opp.name||'Friend'):'';
+  if(opp&&opp.team&&opp.team!==TM.rival){TM.rival=opp.team;applyTeams()}
+  if(m.status==='waiting'||m.status==='lobby'){ // pre-match: both players must be here and looking at the game
+    if(S.mode==='online'&&S.phase!=='menu'){S.mode='bot';S.phase='menu'}
+    showLobby();renderDuo(me,opp,m.status);
+    if(m.status==='lobby'&&!me.ready&&!document.hidden)wsSend({type:'ready'});
     return;
   }
-  if(!v||v.youIdx<0){lmsg('This match already has two players. Ask for a new link.',true);return}
-  ON.role=v.youIdx===0?'host':'guest';
-  if(!ON.named&&m.status==='playing'){const n=myName()||'Player';wsSend({type:'action',action:{t:'name',name:n,team:TM.you}});ON.named=true}
-  const ot=v.teams&&v.opp&&v.teams[v.opp];if(ot&&ot!==TM.rival){TM.rival=ot;applyTeams()}
-  ON.oppName=(v.opp&&v.names&&v.names[v.opp])||ON.oppName||'Friend';
-  $('#rivalName').textContent=ON.oppName.slice(0,7).toUpperCase();
-  if(S.mode!=='online'){startOnline(v);return}
+  const v=m.view;if(!v)return;
+  $('#rivalName').textContent=(ON.oppName||'FRIEND').slice(0,7).toUpperCase();
+  if(S.mode!=='online'){
+    if(ON.counting)return;
+    const fresh=v.k===0&&!v.res.you.length&&!v.res.opp.length&&m.status==='playing';
+    $('#lobby').hidden=true;
+    if(fresh)countdown(()=>startOnline(ON.view));else startOnline(v); // rejoining mid-match: straight back in
+    return;
+  }
   // the other player started a rematch, or we are behind a reset
   const total=v.res.you.length+v.res.opp.length;
   if(total===0&&v.k===0&&(S.phase==='over'||S.turn>0)){startOnline(v);return}
-  if(m.status==='playing'&&m.connected<2)netNote(`${ON.oppName} disconnected. Waiting for them to come back…`);else if(ON.retry===0)netNote('');
-  syncOnline();
+  if(m.left&&m.left!==pidGet())netNote(`${ON.oppName} left the match.`);
+  else if(m.status==='playing'&&opp&&!opp.online)netNote(`${ON.oppName} lost connection. Waiting for them…`);else if(ON.retry===0)netNote('');
+  vcUI();syncOnline();
+}
+function countdown(done){ // 3-2-1 so both players start together
+  ON.counting=true;const el=$('#cd'),num=$('#cdNum');el.hidden=false;let n=3;AU.init();
+  const tick=()=>{if(n===0){el.hidden=true;ON.counting=false;done();return}num.textContent=n;num.className='';void num.offsetWidth;num.className='pop';AU.tick(n===1?2:1.4);n--;setTimeout(tick,750)};tick();
 }
 function startOnline(v){
-  S.mode='online';AU.init();ON.named=true;
+  S.mode='online';AU.init();ON.named=true;$('#lobby').hidden=true;
   startGame();
   // rejoining mid-match: jump to the server's position without replaying kicks
   if(v.k>0){S.res={you:v.res.you.slice(),rival:v.res.opp.slice()};S.turn=v.k;S.anim=null;renderBoard();startTurn()}
-  syncOnline();
+  vcUI();syncOnline();
 }
 function syncOnline(){
   const v=ON.view;if(!online()||!v||S.phase==='over')return;
@@ -1371,41 +1424,102 @@ function sendMove(v){
 }
 function tryResolve(){syncOnline()}
 function askRematch(){ON.want=true;$('#again').disabled=true;$('#again').textContent='STARTING…';wsSend({type:'reset'})}
-function leaveOnline(){ON.closing=true;if(ON.ws){try{ON.ws.close()}catch(e){}ON.ws=null}ON.named=false;netNote('');try{history.replaceState(null,'',location.pathname)}catch(e){}}
+function leaveOnline(){wsSend({type:'leave'});ON.closing=true;if(ON.ws){try{ON.ws.close()}catch(e){}ON.ws=null}ON.code='';ON.named=false;ON.counting=false;roomClear();vcStop();netNote('');$('#cd').hidden=true;try{history.replaceState(null,'',location.pathname)}catch(e){}vcUI()}
+function newCode(){const abc='abcdefghjkmnpqrstuvwxyz23456789';let c='';for(let i=0;i<5;i++)c+=abc[(Math.random()*abc.length)|0];return c}
 function openInvite(){
-  AU.init();$('#menu').hidden=true;$('#lobby').hidden=false;$('#joinBox').hidden=true;$('#inviteBox').hidden=false;
-  $('#lobbyTitle').textContent='VS FRIEND';$('#lobbyEyebrow').textContent='ONLINE 1V1';
-  const abc='abcdefghjkmnpqrstuvwxyz23456789';let code='';for(let i=0;i<6;i++)code+=abc[(Math.random()*abc.length)|0];
-  try{history.replaceState(null,'','?room='+code)}catch(e){}
-  setInviteLink(code);connectRoom(code);
+  AU.init();showLobby();$('#joinBox').hidden=true;$('#inviteBox').hidden=false;$('#duo').hidden=true;
+  $('#lobbyTitle').textContent='VS FRIEND';$('#lobbyEyebrow').textContent='ONLINE 1V1';ON.role='host';
+  const code=newCode();try{history.replaceState(null,'','?room='+code)}catch(e){}
+  setInviteLink(code);lmsg('Connecting…');connectRoom(code);
 }
 function setInviteLink(code){
-  const link=inviteLink(code);$('#linkOut').textContent=link;
-  const nm=myName();
-  $('#waBtn').href='https://wa.me/?text='+encodeURIComponent(`${nm?nm+' challenges you':'I challenge you'} to a penalty shootout ⚽ ${link}`);
+  const link=inviteLink(code);$('#linkOut').textContent=link;$('#codeOut').textContent=code.toUpperCase();
+  const nm=myName();ON.shareText=`${nm?nm+' challenges you':'I challenge you'} to a penalty shootout ⚽ Code ${code.toUpperCase()}`;ON.link=link;
 }
 function openJoin(code){
-  $('#menu').hidden=true;$('#lobby').hidden=false;$('#inviteBox').hidden=true;$('#joinBox').hidden=false;
-  $('#lobbyTitle').textContent='CHALLENGE!';$('#lobbyEyebrow').textContent='PENALTY SHOOTOUT 1V1';
-  lmsg('');
+  showLobby();$('#inviteBox').hidden=true;$('#joinBox').hidden=false;$('#duo').hidden=true;$('#joinPlay').disabled=false;
+  $('#lobbyTitle').textContent='CHALLENGE!';$('#lobbyEyebrow').textContent='PENALTY SHOOTOUT 1V1';ON.role='guest';lmsg('');
   $('#joinPlay').onclick=()=>{AU.init();if(!myName()){lmsg('Type your name first.',true);$('#nick').focus();return}
-    try{localStorage.setItem('ty:nick',myName())}catch(e){}$('#joinPlay').disabled=true;lmsg('Joining…');connectRoom(code)};
+    try{localStorage.setItem('ty:nick',myName())}catch(e){}$('#joinPlay').disabled=true;lmsg('Joining…');
+    try{history.replaceState(null,'','?room='+code)}catch(e){}connectRoom(code)};
+}
+function rejoin(code){ // this tab was already in the match (page reloaded or reopened): straight back in
+  showLobby();$('#inviteBox').hidden=true;$('#joinBox').hidden=true;$('#duo').hidden=true;lmsg('Reconnecting…');setInviteLink(code);connectRoom(code);
 }
 try{$('#nick').value=localStorage.getItem('ty:nick')||''}catch(e){}
-$('#nick').addEventListener('input',()=>{try{localStorage.setItem('ty:nick',myName())}catch(e){}if(ON.code&&!$('#inviteBox').hidden)setInviteLink(ON.code)});
+let helloT=0;
+$('#nick').addEventListener('input',()=>{try{localStorage.setItem('ty:nick',myName())}catch(e){}if(ON.code){setInviteLink(ON.code);clearTimeout(helloT);helloT=setTimeout(()=>wsSend({type:'hello',name:myName()||'Player',team:TM.you}),400)}});
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('[data-teamsel] .tarrow')&&ON.code)setTimeout(()=>wsSend({type:'hello',name:myName()||'Player',team:TM.you}),50)});
 $('#playFriend').addEventListener('click',openInvite);
-$('#copyLink').addEventListener('click',async()=>{const t=$('#linkOut').textContent;try{if(navigator.share&&/Mobi|Android|iPhone/i.test(navigator.userAgent)){await navigator.share({title:'Twelve Yards',text:'Penalty shootout — you vs me ⚽',url:t});return}
-  await navigator.clipboard.writeText(t);lmsg('Link copied. Send it to your friend.')}catch(e){const r=document.createRange();r.selectNodeContents($('#linkOut'));const sel=getSelection();sel.removeAllRanges();sel.addRange(r);lmsg('Select the link above and copy it.')}});
-$('#lobbyBack').addEventListener('click',()=>{leaveOnline();S.mode='bot';$('#lobby').hidden=true;$('#menu').hidden=false;$('#joinPlay').disabled=false});
+// share without leaving the game where the phone allows it (the share sheet opens on top)
+$('#shareBtn').addEventListener('click',async()=>{const url=ON.link;if(!url)return;
+  if(navigator.share){try{await navigator.share({title:'Twelve Yards',text:ON.shareText,url});return}catch(e){if(e&&e.name==='AbortError')return}}
+  location.href='https://wa.me/?text='+encodeURIComponent(ON.shareText+' '+url)});
+$('#copyLink').addEventListener('click',async()=>{const t=ON.link;try{await navigator.clipboard.writeText(t);lmsg('Link copied. Send it to your friend.')}catch(e){const r=document.createRange();r.selectNodeContents($('#linkOut'));const sel=getSelection();sel.removeAllRanges();sel.addRange(r);lmsg('Select the link above and copy it.')}});
+$('#codeGo').addEventListener('click',()=>{const c=$('#codeIn').value.trim().toLowerCase();if(!/^[a-z0-9]{4,12}$/.test(c)){lmsg('Type the code your friend sent you.',true);return}
+  leaveOnline();openJoin(c);$('#joinPlay').click()});
+$('#lobbyBack').addEventListener('click',()=>{leaveOnline();S.mode='bot';$('#lobby').hidden=true;$('#menu').hidden=false;$('#joinPlay').disabled=false;renderTeamSel()});
+// when the page comes back to the front in the lobby, say we're ready (the server starts once both are)
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ON.status==='lobby'&&ON.me&&!ON.me.ready)wsSend({type:'ready'})});
+
+/* ---------------- Voice chat: a direct audio call between the two players (WebRTC; the game server only passes the setup messages) ---------------- */
+const VC={pc:null,stream:null,on:false,muted:false,making:false,ignore:false,audio:null,needTap:false,an:null,buf:null};
+const vcSupported=()=>!!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.RTCPeerConnection);
+function vcPC(){
+  if(VC.pc)return VC.pc;
+  const pc=new RTCPeerConnection({iceServers:[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}]});
+  pc.onicecandidate=e=>{if(e.candidate)wsSend({type:'rtc',data:{c:e.candidate}})};
+  pc.onnegotiationneeded=async()=>{try{VC.making=true;await pc.setLocalDescription();wsSend({type:'rtc',data:{d:pc.localDescription}})}catch(e){console.warn('voice',e)}finally{VC.making=false}};
+  pc.ontrack=e=>{const a=VC.audio||(VC.audio=document.createElement('audio'));a.autoplay=true;a.setAttribute('playsinline','');a.srcObject=e.streams[0]||new MediaStream([e.track]);
+    a.play().then(()=>{VC.needTap=false}).catch(()=>{VC.needTap=true;netNote('Tap anywhere to hear your friend');});
+    try{if(AU.c){const src=AU.c.createMediaStreamSource(a.srcObject);VC.an=AU.c.createAnalyser();VC.an.fftSize=512;src.connect(VC.an);VC.buf=new Uint8Array(VC.an.fftSize)}}catch(err){}
+    vcUI()};
+  pc.onconnectionstatechange=()=>{if(pc.connectionState==='failed'&&pc.restartIce)pc.restartIce();vcUI()};
+  return VC.pc=pc;
+}
+async function vcSignal(data){ // "perfect negotiation": the guest gives way if both call at the same moment
+  if(!data)return;if(data.bye){vcDropPeer();return}
+  const pc=vcPC(),polite=ON.role==='guest';
+  try{
+    if(data.d){const d=data.d,collision=d.type==='offer'&&(VC.making||pc.signalingState!=='stable');VC.ignore=!polite&&collision;if(VC.ignore)return;
+      await pc.setRemoteDescription(d);if(d.type==='offer'){await pc.setLocalDescription();wsSend({type:'rtc',data:{d:pc.localDescription}})}}
+    else if(data.c){try{await pc.addIceCandidate(data.c)}catch(e){if(!VC.ignore)throw e}}
+  }catch(e){console.warn('voice',e)}
+}
+function vcDropPeer(){try{VC.pc&&VC.pc.close()}catch(e){}VC.pc=null;VC.an=null;if(VC.audio)VC.audio.srcObject=null;
+  if(VC.stream&&ON.opp&&ON.opp.online){const pc=vcPC();VC.stream.getTracks().forEach(t=>pc.addTrack(t,VC.stream))}vcUI()} // the friend reloaded: call again
+async function vcStart(){
+  if(!vcSupported()){netNote('Voice chat needs the secure (https) game link.');setTimeout(()=>netNote(''),3500);return}
+  if(!ON.code||!ON.opp){netNote('Voice chat works once your friend has joined.');setTimeout(()=>netNote(''),3000);return}
+  try{VC.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})}
+  catch(e){netNote('Microphone blocked. Allow it in your browser settings.');setTimeout(()=>netNote(''),4000);return}
+  const pc=vcPC();VC.stream.getTracks().forEach(t=>pc.addTrack(t,VC.stream));VC.on=true;VC.muted=false;
+  if(VC.audio)VC.audio.play().catch(()=>{});vcUI();
+}
+function vcToggle(){AU.init();if(!VC.on){vcStart();return}VC.muted=!VC.muted;VC.stream.getAudioTracks().forEach(t=>t.enabled=!VC.muted);vcUI()}
+function vcStop(){if(VC.pc)wsSend({type:'rtc',data:{bye:1}});if(VC.stream)VC.stream.getTracks().forEach(t=>t.stop());VC.stream=null;VC.on=false;VC.muted=false;try{VC.pc&&VC.pc.close()}catch(e){}VC.pc=null;VC.an=null;if(VC.audio)VC.audio.srcObject=null}
+function vcUI(){
+  const inRoom=!!ON.code,cls=VC.on?(VC.muted?'muted':'on'):'';
+  const hud=$('#vcHud');hud.hidden=!(inRoom&&online());hud.className='icon-btn vc '+cls;hud.setAttribute('aria-label',!VC.on?'Start voice chat':VC.muted?'Unmute microphone':'Mute microphone');
+  const b=$('#vcBtn');b.hidden=!(inRoom&&ON.opp);b.className='btn alt wide '+cls;$('#vcBtnTxt').textContent=!VC.on?'VOICE CHAT':VC.muted?'MIC MUTED':'VOICE ON · TAP TO MUTE';
+}
+function vcLevel(){ // light up the mic button and the friend's card while they talk
+  if(!VC.an)return;VC.an.getByteTimeDomainData(VC.buf);let m=0;for(let i=0;i<VC.buf.length;i+=8)m=Math.max(m,Math.abs(VC.buf[i]-128));
+  const talk=m>14;$('#vcHud').classList.toggle('talking',talk);const th=$('#pThem');th&&th.parentElement.classList.toggle('talking',talk);
+}
+setInterval(vcLevel,120);
+$('#vcHud').addEventListener('click',vcToggle);$('#vcBtn').addEventListener('click',vcToggle);
+document.addEventListener('pointerdown',()=>{if(VC.needTap&&VC.audio){VC.audio.play().then(()=>{VC.needTap=false;netNote('')}).catch(()=>{})}},{capture:true});
+
 // opened from an invite link
 {const code=(qs.get('room')||'').toLowerCase();if(/^[a-z0-9]{4,12}$/.test(code)){
-  // the player who created this room reclaims their seat on reload (same browser id)
-  openJoin(code);
+  if(roomSaved()===code)rejoin(code); // this tab already belongs to that match
+  else openJoin(code);
 }}
 window.addEventListener('resize',resize);
 resize();renderBoard();requestAnimationFrame(loop);
 if(document.readyState==='complete')initPixi();else addEventListener('load',initPixi);
-window.TY={S,PX,ON,TM,AU,kitPose,IMG}; // handy for debugging from the browser console
+window.TY={S,PX,ON,TM,AU,kitPose,IMG,VC}; // handy for debugging from the browser console
 })();
 </script>
 </body>

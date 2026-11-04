@@ -26,24 +26,25 @@ function mix(a, b) {
 }
 function rand(seed, i) { return mix(seed, i + 1) / 4294967296; }
 
-// Strike error allowed before the shot goes off target (per zone 0-5: top L,C,R, low L,C,R)
-function thr(z) { const c = z % 3, r = (z / 3) | 0; return r === 0 ? (c === 1 ? 0.55 : 0.4) : (c === 1 ? 0.85 : 0.6); }
 
-function saveChance(sz, kz, e) {
+// No power meter: you only choose where to shoot. A guess on the right side and height is a good
+// chance of a save, but most kicks go in. Shared with the client (vs computer) — keep both copies equal.
+function saveChance(sz, kz) {
   const sc = sz % 3, sr = (sz / 3) | 0;
   let p = 0;
-  if (kz < 0) p = sc === 1 ? (sr === 1 ? 0.75 : 0.5) : 0;
+  if (kz < 0) p = sc === 1 ? (sr === 1 ? 0.6 : 0.35) : 0;
   else {
     const kc = kz % 3, kr = (kz / 3) | 0;
     if (kc === sc) {
-      if (kr === sr) p = sc === 1 ? 0.96 : (sr === 0 ? 0.8 : 0.92);
-      else p = sc === 1 ? (kr === 0 ? 0.5 : 0.45) : (sr === 0 ? 0.4 : 0.6);
-    } else if (kc === 1) p = 0.1;
-    else if (sc === 1) p = sr === 1 ? 0.3 : 0.15;
+      if (kr === sr) p = sc === 1 ? 0.8 : (sr === 0 ? 0.6 : 0.72);
+      else p = sc === 1 ? (kr === 0 ? 0.35 : 0.3) : (sr === 0 ? 0.25 : 0.4);
+    } else if (kc === 1) p = 0.05;
+    else if (sc === 1) p = sr === 1 ? 0.18 : 0.08;
   }
-  if (p > 0) { if (e < 0.12) p -= 0.15; else if (e > 0.3) p += 0.12; }
-  return Math.max(0, Math.min(0.98, p));
+  return p;
 }
+// small risk of missing the target: top corners are the riskiest
+function missChance(z) { const c = z % 3, r = (z / 3) | 0; return r === 0 ? (c === 1 ? 0.04 : 0.09) : (c === 1 ? 0.02 : 0.05); }
 
 export function setup(players) {
   const res = {};
@@ -106,12 +107,12 @@ export function applyAction(state, playerId, action) {
   const z = pending.shot.z, e = pending.shot.e, kz = pending.dive.z;
   const corner = z % 3 !== 1, high = z < 3;
   let outcome = "goal", kind = "";
-  if (e > thr(z)) {
+  if (rand(seed, 5) < missChance(z)) {
     outcome = "miss";
     if (high && rand(seed, 3) < 0.3) kind = "bar"; // rattles the crossbar and stays out
     else kind = high && (!corner || rand(seed, 0) < 0.55) ? "over" : (rand(seed, 1) < 0.3 ? "post" : "wide");
-  } else if (rand(seed, 2) < saveChance(z, kz, e)) outcome = "save";
-  else if (high && e > 0.2 && rand(seed, 4) < 0.2) kind = "barin"; // goal off the underside of the bar
+  } else if (rand(seed, 2) < saveChance(z, kz)) outcome = "save";
+  else if (high && rand(seed, 4) < 0.12) kind = "barin"; // goal off the underside of the bar
 
   const res = { ...state.res, [shooter]: [...state.res[shooter], outcome === "goal" ? "goal" : "miss"] };
   return {
